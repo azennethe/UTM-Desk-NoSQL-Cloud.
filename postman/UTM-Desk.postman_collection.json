@@ -1,0 +1,14 @@
+{"info":{"name":"UTM Desk API","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+"variable":[{"key":"baseUrl","value":"http://localhost:4000/api"},{"key":"token","value":""},{"key":"id","value":""}],
+"auth":{"type":"bearer","bearer":[{"key":"token","value":"{{token}}","type":"string"}]},
+"item":[
+{"name":"Login admin","event":[{"listen":"test","script":{"exec":["pm.test('200',()=>pm.response.to.have.status(200));pm.collectionVariables.set('token',pm.response.json().token);"]}}],"request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"{{baseUrl}}/auth/login","body":{"mode":"raw","raw":"{\"email\":\"admin@utm.mx\",\"password\":\"Admin1234\"}"}}},
+{"name":"Registrar usuario","request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"{{baseUrl}}/auth/register","body":{"mode":"raw","raw":"{\"nombre\":\"Ana Prueba\",\"email\":\"ana@utm.mx\",\"password\":\"Password123\"}"}}},
+{"name":"Crear incidencia","event":[{"listen":"test","script":{"exec":["pm.test('201',()=>pm.response.to.have.status(201));pm.collectionVariables.set('id',pm.response.json()._id);"]}}],"request":{"method":"POST","url":"{{baseUrl}}/incidencias","body":{"mode":"formdata","formdata":[{"key":"titulo","value":"Falla de switch en laboratorio","type":"text"},{"key":"descripcion","value":"Sin conectividad en la fila 2 del laboratorio","type":"text"},{"key":"categoria","value":"Cómputo y telecomunicaciones","type":"text"},{"key":"prioridad","value":"Alta","type":"text"},{"key":"edificio","value":"Edificio C","type":"text"},{"key":"espacio","value":"Lab 4","type":"text"},{"key":"etiquetas","value":"[\"WiFi\",\"Switch\"]","type":"text"},{"key":"evidencias","type":"file","src":[]}]}}},
+{"name":"Listar / buscar","request":{"method":"GET","url":"{{baseUrl}}/incidencias?q=switch&estado=Abierta"}},
+{"name":"Detalle","request":{"method":"GET","url":"{{baseUrl}}/incidencias/{{id}}"}},
+{"name":"Cambiar estado","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"url":"{{baseUrl}}/incidencias/{{id}}/estado","body":{"mode":"raw","raw":"{\"estado\":\"En proceso\",\"comentario\":\"Diagnóstico inicial\"}"}}},
+{"name":"Registrar intervención","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"{{baseUrl}}/incidencias/{{id}}/intervenciones","body":{"mode":"raw","raw":"{\"comentario\":\"Reemplazo de cable\",\"horas\":1.5}"}}},
+{"name":"Estadísticas","request":{"method":"GET","url":"{{baseUrl}}/stats"}},
+{"name":"Exportar JSON","request":{"method":"GET","url":"{{baseUrl}}/incidencias/export"}},
+{"name":"Base de conocimiento","request":{"method":"GET","url":"{{baseUrl}}/kb?q=wifi"}}]}
