@@ -1,4 +1,36 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 @import "tailwindcss";
-@theme{--font-sans:'Inter',system-ui,sans-serif;--font-mono:'JetBrains Mono',monospace}
-body{background:#f4f8f5;color:#1e293b}
+@theme{--font-sans:'Inter',system-ui,sans-serif;--font-mono:'JetBrains Mono',monospace;--font-heading:'Sora','Inter',system-ui,sans-serif}
+body{background:#f8fafc;color:#1e293b;-webkit-font-smoothing:antialiased}
+
+/* Encabezado de página: Sora ExtraBold con tracking apretado */
+.page-header h1{font-family:var(--font-heading);font-size:1.5rem;line-height:1.375;font-weight:800;letter-spacing:-.025em;color:#0f172a}
+.page-header p{font-size:.75rem;line-height:1.375;color:#64748b;margin-top:.125rem}
+@media (min-width:1024px){
+  .page-header h1{font-size:1.875rem}
+  .page-header p{font-size:.875rem}
+}
+
+/* Títulos de sección dentro de una card */
+.app-card h2,.app-card h3{font-family:var(--font-heading);letter-spacing:-.015em;color:#0f172a}
+
+/* Sistema de elevación: luz superior + capas laterales + sombra profunda */
+:where(.app-card){
+  box-shadow:inset 0 1px rgba(255,255,255,.9),0 -1px 3px rgba(15,23,42,.02),-3px 0 10px rgba(15,23,42,.03),3px 0 10px rgba(15,23,42,.03),0 18px 38px rgba(15,23,42,.07);
+  transition:transform .28s cubic-bezier(.22,1,.36,1),box-shadow .28s cubic-bezier(.22,1,.36,1),border-color .28s cubic-bezier(.22,1,.36,1)
+}
+:where(.app-card):hover{
+  transform:translateY(-4px) scale(1.008);
+  border-color:rgba(100,116,139,.3);
+  box-shadow:inset 0 1px rgba(255,255,255,.9),0 -1px 3px rgba(15,23,42,.02),-4px 0 14px rgba(15,23,42,.05),4px 0 14px rgba(15,23,42,.05),0 26px 52px rgba(15,23,42,.12)
+}
+
+/* Entrada orgánica de los bloques */
+@keyframes fadeUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
+.reveal{animation:fadeUp .6s cubic-bezier(.22,1,.36,1) both}
+
+@media (prefers-reduced-motion:reduce){
+  .reveal{animation:none}
+  :where(.app-card){transition:none}
+  :where(.app-card):hover{transform:none}
+}

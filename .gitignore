@@ -1,0 +1,26 @@
+# Dependencias
+node_modules/
+client/dist/
+
+# Secretos: nunca versionar credenciales reales
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.local
+client/.env
+client/.env.local
+
+# Base de datos local de mongodb-memory-server y volcados de prueba
+.cache/
+*.log
+server/.mongo-memory/
+evidencias-locales/
+# Exportes con hashes bcrypt de las cuentas demo
+server/datos-demo/
+
+# Editores y sistema
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

@@ -1,14 +1,3861 @@
-{"info":{"name":"UTM Desk API","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
-"variable":[{"key":"baseUrl","value":"http://localhost:4000/api"},{"key":"token","value":""},{"key":"id","value":""}],
-"auth":{"type":"bearer","bearer":[{"key":"token","value":"{{token}}","type":"string"}]},
-"item":[
-{"name":"Login admin","event":[{"listen":"test","script":{"exec":["pm.test('200',()=>pm.response.to.have.status(200));pm.collectionVariables.set('token',pm.response.json().token);"]}}],"request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"{{baseUrl}}/auth/login","body":{"mode":"raw","raw":"{\"email\":\"admin@utm.mx\",\"password\":\"Admin1234\"}"}}},
-{"name":"Registrar usuario","request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"{{baseUrl}}/auth/register","body":{"mode":"raw","raw":"{\"nombre\":\"Ana Prueba\",\"email\":\"ana@utm.mx\",\"password\":\"Password123\"}"}}},
-{"name":"Crear incidencia","event":[{"listen":"test","script":{"exec":["pm.test('201',()=>pm.response.to.have.status(201));pm.collectionVariables.set('id',pm.response.json()._id);"]}}],"request":{"method":"POST","url":"{{baseUrl}}/incidencias","body":{"mode":"formdata","formdata":[{"key":"titulo","value":"Falla de switch en laboratorio","type":"text"},{"key":"descripcion","value":"Sin conectividad en la fila 2 del laboratorio","type":"text"},{"key":"categoria","value":"Cómputo y telecomunicaciones","type":"text"},{"key":"prioridad","value":"Alta","type":"text"},{"key":"edificio","value":"Edificio C","type":"text"},{"key":"espacio","value":"Lab 4","type":"text"},{"key":"etiquetas","value":"[\"WiFi\",\"Switch\"]","type":"text"},{"key":"evidencias","type":"file","src":[]}]}}},
-{"name":"Listar / buscar","request":{"method":"GET","url":"{{baseUrl}}/incidencias?q=switch&estado=Abierta"}},
-{"name":"Detalle","request":{"method":"GET","url":"{{baseUrl}}/incidencias/{{id}}"}},
-{"name":"Cambiar estado","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"url":"{{baseUrl}}/incidencias/{{id}}/estado","body":{"mode":"raw","raw":"{\"estado\":\"En proceso\",\"comentario\":\"Diagnóstico inicial\"}"}}},
-{"name":"Registrar intervención","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"{{baseUrl}}/incidencias/{{id}}/intervenciones","body":{"mode":"raw","raw":"{\"comentario\":\"Reemplazo de cable\",\"horas\":1.5}"}}},
-{"name":"Estadísticas","request":{"method":"GET","url":"{{baseUrl}}/stats"}},
-{"name":"Exportar JSON","request":{"method":"GET","url":"{{baseUrl}}/incidencias/export"}},
-{"name":"Base de conocimiento","request":{"method":"GET","url":"{{baseUrl}}/kb?q=wifi"}}]}
+{
+  "info": {
+    "_postman_id": "9c1f0a6e-4b0b-4d5e-9b1a-utm0desk0001",
+    "name": "UTM Desk API — 4 roles, autorización RF-06/07 y errores",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Cobertura de la API de UTM Desk NoSQL Cloud.\n\nVariables: baseUrl (http://localhost:4100/api con `npm run dev:local`), tokenReportante, tokenTecnico, tokenSoporte, tokenDirectivo, id, idPendiente, tecnicoId, artId, idUsuario, idPropio, sufijo.\nsufijo forma parte de los correos de ejemplo (persona.prueba1@…, tecnico.nuevo1@…). Si repites la colección sobre la misma base, súbelo a 2, 3… para que los alta no choquen con 409 \"correo ya registrado\".\nEjecuta primero la carpeta Autenticación: los cuatro login guardan su token automáticamente.\nLos correos y contraseñas de ejemplo son las cuentas de demostración de server/seed-demo.js (Demo.2026). Sustitúyelos por tus credenciales reales si pruebas contra Atlas.\nCada petición declara en su descripción el código HTTP esperado; los tests lo comprueban."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4100/api"
+    },
+    {
+      "key": "tokenReportante",
+      "value": ""
+    },
+    {
+      "key": "tokenTecnico",
+      "value": ""
+    },
+    {
+      "key": "tokenSoporte",
+      "value": ""
+    },
+    {
+      "key": "tokenDirectivo",
+      "value": ""
+    },
+    {
+      "key": "id",
+      "value": ""
+    },
+    {
+      "key": "idPendiente",
+      "value": ""
+    },
+    {
+      "key": "tecnicoId",
+      "value": ""
+    },
+    {
+      "key": "artId",
+      "value": ""
+    },
+    {
+      "key": "idUsuario",
+      "value": ""
+    },
+    {
+      "key": "idPropio",
+      "value": ""
+    },
+    {
+      "key": "sufijo",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Autenticación y sesiones",
+      "item": [
+        {
+          "name": "Login Soporte TI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('tokenSoporte', pm.response.json().token);",
+                  "pm.collectionVariables.set('idPropio', pm.response.json().user.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"soporte@demo.utm.edu.mx\",\n  \"password\": \"Demo.2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "query": []
+            },
+            "description": "200 + token con rol soporte_ti. Guarda tokenSoporte."
+          }
+        },
+        {
+          "name": "Login Reportante",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('tokenReportante', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"reportante1@demo.utm.edu.mx\",\n  \"password\": \"Demo.2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "query": []
+            },
+            "description": "Guarda tokenReportante."
+          }
+        },
+        {
+          "name": "Login Técnico",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('tokenTecnico', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"tecnico1@demo.utm.edu.mx\",\n  \"password\": \"Demo.2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "query": []
+            },
+            "description": "Guarda tokenTecnico."
+          }
+        },
+        {
+          "name": "Login Directivo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('tokenDirectivo', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"directivo@demo.utm.edu.mx\",\n  \"password\": \"Demo.2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "query": []
+            },
+            "description": "Guarda tokenDirectivo."
+          }
+        },
+        {
+          "name": "Login con clave incorrecta → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"reportante1@demo.utm.edu.mx\",\n  \"password\": \"no-es-la-clave\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "query": []
+            },
+            "description": "401 con mensaje genérico: no revela si el correo existe."
+          }
+        },
+        {
+          "name": "/auth/me devuelve id, nombre, email y rol",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "query": []
+            },
+            "description": "200. La interfaz reanuda la sesión con estos datos; sin id no se puede validar la propiedad de la incidencia."
+          }
+        },
+        {
+          "name": "/auth/me sin token → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "query": []
+            },
+            "description": "Esperado: 401"
+          }
+        },
+        {
+          "name": "/auth/me con token roto → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{NO_EXISTE}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "query": []
+            },
+            "description": "Esperado: 401"
+          }
+        },
+        {
+          "name": "Registro público ignora el rol privilegiado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Persona Prueba\",\n  \"email\": \"persona.prueba{{sufijo}}@test.utm.edu.mx\",\n  \"password\": \"Clave.2026\",\n  \"rol\": \"soporte_ti\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "query": []
+            },
+            "description": "201 pero el rol creado es reportante: escalar privilegios solo lo hace Soporte TI."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Alta de incidencias (reportante)",
+      "item": [
+        {
+          "name": "Crear incidencia Cómputo y Redes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('id', pm.response.json()._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Puerto de red sin enlace en el aula 7\",\n  \"descripcion\": \"El equipo del docente pierde el enlace del puerto; el LED del switch queda apagado.\",\n  \"categoria\": \"Cómputo y telecomunicaciones\",\n  \"prioridad\": \"Media\",\n  \"edificio\": \"Edificio A\",\n  \"espacio\": \"Aula 7\",\n  \"etiquetas\": \"[\\\"red\\\",\\\"switch\\\"]\",\n  \"datosCategoria\": \"{\\\"tipo_equipo\\\":\\\"PC de laboratorio\\\",\\\"equipos_afectados\\\":\\\"2\\\",\\\"direccion_ip\\\":\\\"10.20.3.11\\\",\\\"vlan\\\":\\\"120\\\"}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias",
+              "query": []
+            },
+            "description": "201 con folio UTM-AAAA-NNNN, estado Abierta y autorizacion.estado = pendiente. Guarda el _id en la variable id."
+          }
+        },
+        {
+          "name": "Crear sin los campos obligatorios de la categoría → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Falta datos de categoría\",\n  \"descripcion\": \"Se envía solo un detalle genérico, que ya no está permitido.\",\n  \"categoria\": \"Cómputo y telecomunicaciones\",\n  \"prioridad\": \"Baja\",\n  \"edificio\": \"Edificio A\",\n  \"datosCategoria\": \"{\\\"detalle\\\":\\\"texto libre\\\"}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias",
+              "query": []
+            },
+            "description": "400 que lista los campos faltantes (tipo_equipo, equipos_afectados)."
+          }
+        },
+        {
+          "name": "Crear con VLAN fuera de rango → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"VLAN imposible\",\n  \"descripcion\": \"La VLAN 9999 no existe en el campus.\",\n  \"categoria\": \"Cómputo y telecomunicaciones\",\n  \"prioridad\": \"Baja\",\n  \"edificio\": \"Edificio A\",\n  \"datosCategoria\": \"{\\\"tipo_equipo\\\":\\\"PC\\\",\\\"equipos_afectados\\\":\\\"1\\\",\\\"vlan\\\":\\\"9999\\\"}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Crear con categoría no válida → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Categoría inventada\",\n  \"descripcion\": \"No pertenece al catálogo de tres categorías.\",\n  \"categoria\": \"Fontanería\",\n  \"prioridad\": \"Baja\",\n  \"edificio\": \"Edificio A\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Listar mis incidencias",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias?q=puerto&estado=Abierta",
+              "query": []
+            },
+            "description": "200 {items,total,pages,page}. El alcance por rol solo muestra las propias."
+          }
+        },
+        {
+          "name": "Búsqueda textual en español",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias?q=luminarias%20pasillo",
+              "query": []
+            },
+            "description": "Usa el índice de texto con default_language spanish y ponderación título 10 / descripción 3."
+          }
+        },
+        {
+          "name": "Filtro con estado inexistente → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias?estado=NoExiste",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Autorización y asignación (Soporte TI, RF-06/RF-07)",
+      "item": [
+        {
+          "name": "Bandeja de pendientes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('idPendiente', ((pm.response.json().items || [])[0] || {})._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias?autorizacion=pendiente",
+              "query": []
+            },
+            "description": "Solicitudes que esperan revisión antes de ser atendidas. Guarda en idPendiente la primera que no sea la incidencia {{id}}."
+          }
+        },
+        {
+          "name": "Listar técnicos disponibles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('tecnicoId', (pm.response.json()[0] || {}).id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tecnicos",
+              "query": []
+            },
+            "description": "200. Copia el primer id a la variable tecnicoId."
+          }
+        },
+        {
+          "name": "Asignar técnico sin autorización → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tecnicoId\": \"{{tecnicoId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{idPendiente}}/asignar",
+              "query": []
+            },
+            "description": "No se puede asignar mientras la solicitud siga pendiente (RF-07)."
+          }
+        },
+        {
+          "name": "Aprobar solicitud",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accion\": \"aprobar\",\n  \"motivo\": \"Verificada con el área usuaria\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/autorizacion",
+              "query": []
+            },
+            "description": "200, autorizacion.estado = aprobada y entrada en el historial con el rol."
+          }
+        },
+        {
+          "name": "Aprobar dos veces → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accion\": \"aprobar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/autorizacion",
+              "query": []
+            },
+            "description": "La solicitud ya fue resuelta; no se reabre la autorización."
+          }
+        },
+        {
+          "name": "Rechazar sin motivo → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accion\": \"rechazar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{idPendiente}}/autorizacion",
+              "query": []
+            },
+            "description": "El rechazo exige motivo escrito."
+          }
+        },
+        {
+          "name": "Rechazar con motivo cierra la incidencia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accion\": \"rechazar\",\n  \"motivo\": \"Corresponde a otro plantel, no a la UT de Matamoros.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{idPendiente}}/autorizacion",
+              "query": []
+            },
+            "description": "200 con estado Cerrada y motivo guardado."
+          }
+        },
+        {
+          "name": "Asignar técnico",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tecnicoId\": \"{{tecnicoId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/asignar",
+              "query": []
+            },
+            "description": "200, técnico aplicado con $set e historial de asignación."
+          }
+        },
+        {
+          "name": "Asignar a un usuario que no es técnico → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tecnicoId\": \"000000000000000000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/asignar",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Cambiar prioridad (operador $set)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prioridad\": \"Alta\",\n  \"comentario\": \"Afecta el examen del sábado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/prioridad",
+              "query": []
+            },
+            "description": "200 y trazabilidad en el historial."
+          }
+        },
+        {
+          "name": "Etiquetas con $addToSet y $pull",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agregar\": [\n    \"switch\",\n    \"PoE\",\n    \"switch\"\n  ],\n  \"quitar\": [\n    \"red\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/etiquetas",
+              "query": []
+            },
+            "description": "Sin duplicados gracias a $addToSet; $pull elimina."
+          }
+        },
+        {
+          "name": "Etiquetas vacías → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agregar\": [],\n  \"quitar\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/etiquetas",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Aprobar como reportante → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accion\": \"aprobar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/autorizacion",
+              "query": []
+            },
+            "description": "La aprobación es responsabilidad exclusiva de Soporte TI."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Atención técnica (técnico)",
+      "item": [
+        {
+          "name": "Mi bandeja",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias",
+              "query": []
+            },
+            "description": "El alcance por rol es automático en el servidor: un técnico solo recibe sus asignaciones, sin necesidad de parámetros."
+          }
+        },
+        {
+          "name": "Ver incidencia asignada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}",
+              "query": []
+            },
+            "description": "200 con evidencias y URLs firmadas."
+          }
+        },
+        {
+          "name": "Ver incidencia de otro técnico → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{idPendiente}}",
+              "query": []
+            },
+            "description": "Esperado: 403"
+          }
+        },
+        {
+          "name": "Transición Abierta → En proceso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"En proceso\",\n  \"comentario\": \"Diagnóstico en sitio\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/estado",
+              "query": []
+            },
+            "description": "Solo estados vecinos permitidos por la máquina de estados."
+          }
+        },
+        {
+          "name": "Transición ilegal En proceso → Abierta → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"Abierta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/estado",
+              "query": []
+            },
+            "description": "TRANSICIONES bloquea el retroceso."
+          }
+        },
+        {
+          "name": "Registrar intervención ($inc + $push)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comentario\": \"Se reasienta el conector y se prueba el enlace\",\n  \"horas\": 1.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/intervenciones",
+              "query": []
+            },
+            "description": "200; horasTotales sube con $inc y el historial crece con $push."
+          }
+        },
+        {
+          "name": "Intervención con horas fuera de rango → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comentario\": \"Exceso de horas\",\n  \"horas\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/intervenciones",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Intervención sin comentario → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comentario\": \"\",\n  \"horas\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/intervenciones",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Resolver (En proceso → Resuelta)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"Resuelta\",\n  \"comentario\": \"Enlace estable tras 30 minutos de prueba\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/estado",
+              "query": []
+            },
+            "description": "200 y fechaResolucion; activa el conteo del TTL de 60 días."
+          }
+        },
+        {
+          "name": "Técnico no puede autorizar → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accion\": \"aprobar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/autorizacion",
+              "query": []
+            },
+            "description": "Esperado: 403"
+          }
+        },
+        {
+          "name": "Técnico no puede listar usuarios → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "query": []
+            },
+            "description": "Esperado: 403"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Evidencias (bucket privado + URL firmada)",
+      "item": [
+        {
+          "name": "Adjuntar evidencia como reportante",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "evidencias",
+                  "type": "file",
+                  "src": [],
+                  "description": "Elige una imagen JPG/PNG o un PDF menor a 15 MB."
+                }
+              ]
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/evidencias",
+              "query": []
+            },
+            "description": "multer en memoria (15 MB, 5 archivos, solo JPG/PNG/PDF); se sube al bucket privado y la respuesta guarda la ruta, nunca un enlace permanente."
+          }
+        },
+        {
+          "name": "Leer la incidencia firma la URL al vuelo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}",
+              "query": []
+            },
+            "description": "Cada evidencia trae url = createSignedUrl(3600 s). Verifica que expira y que el bucket sigue privado."
+          }
+        },
+        {
+          "name": "Adjuntar a una incidencia cerrada → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "evidencias",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{idPendiente}}/evidencias",
+              "query": []
+            },
+            "description": "El rechazo cerró la incidencia: no admite más evidencia. Se prueba con Soporte TI para que el 409 dependa solo del estado (el reportante que no es dueño recibiría antes un 403)."
+          }
+        },
+        {
+          "name": "Un técnico no puede adjuntar evidencias → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "evidencias",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/evidencias",
+              "query": []
+            },
+            "description": "La ruta solo admite reportante o Soporte TI; el técnico registra horas en intervenciones."
+          }
+        },
+        {
+          "name": "Subir un archivo no permitido → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "evidencias",
+                  "type": "file",
+                  "src": [],
+                  "description": "Elige un .zip o un .exe para provocar el filtro de tipo."
+                }
+              ]
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/evidencias",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Analítica y exportación (Soporte TI y Directivo)",
+      "item": [
+        {
+          "name": "Estadísticas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stats?desde=2026-01-01&hasta=2026-12-31",
+              "query": []
+            },
+            "description": "200 con promedios, top-10 etiquetas y horas por edificio (pipelines de agregación)."
+          }
+        },
+        {
+          "name": "Estadísticas como directivo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenDirectivo}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stats",
+              "query": []
+            },
+            "description": "El directivo solo consume indicadores."
+          }
+        },
+        {
+          "name": "Estadísticas como reportante → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stats",
+              "query": []
+            },
+            "description": "Esperado: 403"
+          }
+        },
+        {
+          "name": "Exportar JSON",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/export",
+              "query": []
+            },
+            "description": "Documento de control para el acuse de la materia."
+          }
+        },
+        {
+          "name": "Exportar Excel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/export/excel?estado=Resuelta",
+              "query": []
+            },
+            "description": "ExcelJS devuelve .xlsx (Content-Type application/vnd.openxmlformats-...)."
+          }
+        },
+        {
+          "name": "Exportar Excel como directivo → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenDirectivo}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/export/excel",
+              "query": []
+            },
+            "description": "La exportación operativa es de Soporte TI."
+          }
+        },
+        {
+          "name": "Exportar como reportante → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/export",
+              "query": []
+            },
+            "description": "Esperado: 403"
+          }
+        },
+        {
+          "name": "Directivo no consulta el detalle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenDirectivo}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}",
+              "query": []
+            },
+            "description": "El rol directivo solo lee indicadores, no expedientes."
+          }
+        },
+        {
+          "name": "Paginación acotada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias?limit=500&page=1",
+              "query": []
+            },
+            "description": "El parámetro es limit (no limite) y se recorta al máximo de 50 para no volcar la colección."
+          }
+        },
+        {
+          "name": "Filtrar por etiqueta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias?etiqueta=WiFi",
+              "query": []
+            },
+            "description": "Busca en el arreglo de etiquetas ignoriendo mayúsculas y el carácter #."
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Base de conocimiento",
+      "item": [
+        {
+          "name": "Listar artículos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/kb?q=wifi",
+              "query": []
+            },
+            "description": "Visible para todos los roles autenticados."
+          }
+        },
+        {
+          "name": "Crear artículo como Soporte TI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('artId', pm.response.json()._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Cómo reiniciar el PoE del switch de aulas\",\n  \"contenido\": \"1) Verificar LEDs 2) Reiniciar el puerto 3) Probar enlace.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/kb",
+              "query": []
+            },
+            "description": "Guarda el _id en la variable artId."
+          }
+        },
+        {
+          "name": "Crear artículo como reportante → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Sin permisos\",\n  \"contenido\": \"Un reportante no publica en la base de conocimiento.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/kb",
+              "query": []
+            },
+            "description": "Esperado: 403"
+          }
+        },
+        {
+          "name": "Artículo sin contenido → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Falta contenido\",\n  \"contenido\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/kb",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Eliminar artículo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/kb/{{artId}}",
+              "query": []
+            },
+            "description": "Solo Soporte TI borra; deja trazas en consola/auditoría."
+          }
+        },
+        {
+          "name": "Eliminar artículo inexistente → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/kb/000000000000000000000000",
+              "query": []
+            },
+            "description": "Esperado: 404"
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Administración de usuarios",
+      "item": [
+        {
+          "name": "Listar usuarios",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "if (!pm.collectionVariables.get('idUsuario')) pm.collectionVariables.set('idUsuario', (pm.response.json().find(u => u.id !== pm.collectionVariables.get('idPropio')) || {}).id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "query": []
+            },
+            "description": "Nunca expone la contraseña (select negativa en el esquema)."
+          }
+        },
+        {
+          "name": "Crear técnico",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "if (pm.response.json().id) pm.collectionVariables.set('idUsuario', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Técnico Nuevo\",\n  \"email\": \"tecnico.nuevo{{sufijo}}@demo.utm.edu.mx\",\n  \"password\": \"Clave.2026\",\n  \"rol\": \"tecnico\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "query": []
+            },
+            "description": "Esperado: 201"
+          }
+        },
+        {
+          "name": "Crear usuario con rol inválido → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Rol Falso\",\n  \"email\": \"rol.falso@demo.utm.edu.mx\",\n  \"password\": \"Clave.2026\",\n  \"rol\": \"superadmin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Correo duplicado → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Duplicado\",\n  \"email\": \"tecnico.nuevo{{sufijo}}@demo.utm.edu.mx\",\n  \"password\": \"Clave.2026\",\n  \"rol\": \"tecnico\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "query": []
+            },
+            "description": "Esperado: 409"
+          }
+        },
+        {
+          "name": "Cambiar rol",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rol\": \"soporte_ti\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idUsuario}}/rol",
+              "query": []
+            },
+            "description": "Surte efecto en la siguiente petición aunque el token sea viejo: el rol se revalida en la base."
+          }
+        },
+        {
+          "name": "Cambiar el propio rol → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rol\": \"directivo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idPropio}}/rol",
+              "query": []
+            },
+            "description": "Evita que Soporte TI se autodescienda y quede fuera del sistema."
+          }
+        },
+        {
+          "name": "Crear usuario como reportante → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sin Permiso\",\n  \"email\": \"sin.permiso@demo.utm.edu.mx\",\n  \"password\": \"Clave.2026\",\n  \"rol\": \"tecnico\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "query": []
+            },
+            "description": "Esperado: 403"
+          }
+        },
+        {
+          "name": "Eliminar usuario sin ser Soporte TI → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idUsuario}}",
+              "query": []
+            },
+            "description": "La baja de cuentas es exclusiva de Soporte TI."
+          }
+        },
+        {
+          "name": "Eliminar tu propia cuenta → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idPropio}}",
+              "query": []
+            },
+            "description": "El sistema nunca se queda sin administradores: quien borra no puede borrarse a sí mismo."
+          }
+        },
+        {
+          "name": "Eliminar usuario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idUsuario}}",
+              "query": []
+            },
+            "description": "200 con {eliminado}. Las incidencias previas conservan la copia de autor y técnico, así que la trazabilidad no se rompe."
+          }
+        },
+        {
+          "name": "Eliminar un usuario que ya no existe → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idUsuario}}",
+              "query": []
+            },
+            "description": "Esperado: 404"
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Rutas y formatos erróneos",
+      "item": [
+        {
+          "name": "Ruta inexistente → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/no-existe",
+              "query": []
+            },
+            "description": "Esperado: 404"
+          }
+        },
+        {
+          "name": "Método no permitido → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}",
+              "query": []
+            },
+            "description": "El borrado de incidencias no existe por diseño (trazabilidad)."
+          }
+        },
+        {
+          "name": "ObjectId inválido → 400 o 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/no-es-un-id",
+              "query": []
+            },
+            "description": "Esperado: 400"
+          }
+        },
+        {
+          "name": "Cuerpo JSON mal formado → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias",
+              "query": []
+            },
+            "description": "Express rechaza el parseo antes de llegar al modelo."
+          }
+        }
+      ]
+    }
+  ]
+}
