@@ -7,13 +7,12 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import crypto from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Inc, User, CATS, PRIOS, CAMPOS_CATEGORIA, clienteSupabase, siguienteFolio, limpiarEtiquetas } from './index.js';
+import { nombreBucket, rutaDe, resumenBuckets } from './archivos.js';
 const ES_CLI = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 const PASS = process.env.DEMO_PASSWORD || 'Demo.2026';
-const BUCKET = process.env.SUPABASE_BUCKET || 'evidencias';
 
 // PNG de 1x1 px real y PDF mínimo válido: son archivos de prueba legítimos,
 // no metadatos inventados sin archivo detrás.
@@ -57,16 +56,20 @@ const aleat = (semilla) => {
 const rnd = aleat(20261023);
 const pick = a => a[Math.floor(rnd() * a.length)];
 
+// Mismo criterio que la API: la imagen va a incidencias-evidencias y el PDF a
+// incidencias-documentos; cada documento guarda el bucket de su archivo.
 async function subir(sb, folio, i) {
     const png = i % 3 !== 2;
     const nombre = (png ? 'evidencia-' : 'reporte-') + folio + '-' + (i + 1) + (png ? '.png' : '.pdf');
-    const path = `demo/${folio}/${crypto.randomUUID()}/${nombre}`;
-    const { error } = await sb.storage.from(BUCKET).upload(path, png ? PNG : PDF, {
+    const { ruta } = rutaDe(`demo/${folio}`, nombre);
+    const bucket = nombreBucket(png ? 'evidencias' : 'documentos');
+    const buffer = png ? PNG : PDF;
+    const { error } = await sb.storage.from(bucket).upload(ruta, buffer, {
         contentType: png ? 'image/png' : 'application/pdf',
+        upsert: false,
     });
     if (error) throw new Error('Supabase rechazó la subida: ' + error.message);
-    const buffer = png ? PNG : PDF;
-    return { path, nombre, tipo: png ? 'image/png' : 'application/pdf', size: buffer.length, subidoPor: 'seed-demo', fecha: new Date() };
+    return { path: ruta, bucket, nombre, tipo: png ? 'image/png' : 'application/pdf', size: buffer.length, subidoPor: 'seed-demo', fecha: new Date() };
 }
 
 async function upsertUsuario({ nombre, email, rol }) {
@@ -116,7 +119,7 @@ export async function seed({
     const cerrar = async () => { if (desconectar) await mongoose.disconnect(); };
     const db = mongoose.connection.name;
     console.log(`Base de datos destino: ${db}`);
-    console.log(`Storage de evidencias: ${sb ? nombreStorage : 'SIN CONFIGURAR → no se subirá evidencia'}`);
+    console.log(`Storage de archivos: ${sb ? nombreStorage : 'SIN CONFIGURAR → no se subirá evidencia'} · ${resumenBuckets()}`);
 
     const yaExistentes = await Inc.countDocuments({ origen: 'demo' });
     console.log(`Incidencias con origen "demo" ya presentes: ${yaExistentes}`);
@@ -261,7 +264,7 @@ export async function seed({
     for (const [c, v, ok] of cumplimiento) console.log(`  ${ok ? '✔' : '✘'} ${c}: ${v}`);
     console.log(`\nArchivos de evidencia subidos a ${nombreStorage}: ${subidas || 0}${subidas ? '' : ' — sin storage configurado'}`);
     if (falladas) console.log(`Subidas fallidas: ${falladas}`);
-    if (!sb) console.log('PENDIENTE: sin SUPABASE_URL/SUPABASE_SERVICE_KEY las incidencias quedaron SIN evidencias reales. Configura el bucket privado y reejecuta el seed.');
+    if (!sb) console.log('PENDIENTE: sin SUPABASE_URL + SUPABASE_SECRET_KEY las incidencias quedaron SIN evidencias reales. Configura los buckets privados y reejecuta el seed.');
 
     const verificado = cumplimiento.every(x => x[2]);
     if (!verificado) console.error('\nEl seed NO cumple todas las condiciones; revisa los avisos anteriores.');

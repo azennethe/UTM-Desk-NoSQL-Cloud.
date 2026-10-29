@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-import { api, excel } from './api';
+import { api, excel, estado } from './api';
+import {
+  NAV_ROL,
+  PUNTO_ROL,
+  VISTA_ROL,
+  fijarRolActivo,
+  olvidarRolActivo,
+  rolActivo,
+} from './roles';
 import {
   saveDraft,
   syncDrafts,
@@ -47,6 +55,40 @@ const EDIF = [
   'Rectoría',
 ];
 
+// El catálogo de arriba es el de demostración. En un clúster real hay edificios distintos, así que
+// los selectores de *Ubicación* se completan con lo que responde `GET /edificios`; sin eso, elegir
+// un edificio con expedientes era imposible y el filtro devolvía una tabla vacía.
+const claveEdificio = (x: string) =>
+  String(x).trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+
+const uneEdificios = (a: string[], b: string[]) => {
+  const vistos = new Set(a.map(claveEdificio));
+  const extra = [];
+  for (const x of b || []) {
+    if (!x || vistos.has(claveEdificio(x))) continue;
+    vistos.add(claveEdificio(x));
+    extra.push(x);
+  }
+  return [...a, ...extra];
+};
+
+let EDIF_CACHE: Promise<string[]> | null = null;
+
+const useEdificios = () => {
+  const [lista, setLista] = useState<string[]>(EDIF);
+
+  useEffect(() => {
+    let vivo = true;
+    EDIF_CACHE ||= api('/edificios').catch(() => []);
+    EDIF_CACHE.then((r: any) => vivo && setLista(uneEdificios(EDIF, Array.isArray(r) ? r : [])));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  return lista;
+};
+
 const inp =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 placeholder:text-slate-400';
 
@@ -58,6 +100,24 @@ const ghost =
 
 const lbl =
   'mb-1 block text-[11px] font-medium uppercase tracking-wider text-slate-500';
+
+// Espejo local de server/archivos.js. Solo adelanta al usuario lo que la API valida y
+// clasifica de todos modos: el bucket lo decide la operación en el servidor, nunca aquí.
+const IMG = ['image/jpeg', 'image/png', 'image/webp'];
+const DOC = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+];
+const LIM_IMG = 10e6, LIM_DOC = 20e6, LIM_FOTO = 5e6;
+const ACEPTA_EV = '.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt';
+const ACEPTA_FOTO = '.jpg,.jpeg,.png,.webp';
+const cupo = (f: File) =>
+  IMG.includes(f.type) ? f.size <= LIM_IMG : DOC.includes(f.type) ? f.size <= LIM_DOC : false;
+const destino = (t: string) => (IMG.includes(t) ? 'incidencias-evidencias' : 'incidencias-documentos');
 
 const PC: any = {
   Urgente: 'bg-red-50 text-red-700',
@@ -115,8 +175,8 @@ const CAMPOS_CAT: any = {
   [CATS[0]]: [
     { k: 'tipo_equipo', l: 'Tipo de equipo', req: true, ph: 'Ej. Laptop, switch, proyector' },
     { k: 'equipos_afectados', l: 'Equipos afectados', req: true, ph: 'Ej. 3 equipos del LAB-2' },
-    { k: 'direccion_ip', l: 'Dirección IP', ph: 'Ej. 162.128.45.10' },
-    { k: 'vlan', l: 'VLAN', ph: 'Entero 1-4094' },
+    { k: 'direccion_ip', l: 'Dirección IP', ph: 'Ej. 192.168.10.25' },
+    { k: 'vlan', l: 'VLAN', ph: 'Ej. 10 (entero 1-4094)' },
   ],
   [CATS[1]]: [
     { k: 'tipo_infraestructura', l: 'Tipo de infraestructura', req: true, ph: 'Ej. Climatización, cableado' },
@@ -132,10 +192,22 @@ const CAMPOS_CAT: any = {
   ],
 };
 
+// Modelo multirol: `roles` es el conjunto que autoriza y `rol` es el activo (el que se muestra
+// como etiqueta). Los permisos se evalúan como unión del conjunto, igual que en el servidor.
+const rolesDe = (u: any): string[] => {
+  const lista: string[] = u?.roles?.length ? u.roles : [u?.rol];
+  return [...new Set(lista.filter(Boolean))];
+};
+const tiene = (u: any, ...rs: string[]) => rolesDe(u).some((r) => rs.includes(r));
+// Etiqueta legible del conjunto: "Soporte TI · Técnico".
+const etiquetaRoles = (u: any) =>
+  rolesDe(u).map((r) => ROL_LABEL[r] || r).join(' · ') || 'Sin rol';
+
 // Roles que intervienen incidencias, los que las gestionan y los que ven analítica
-const interviene = (u: any) => u.rol === 'tecnico' || u.rol === 'soporte_ti';
-const gestiona = (u: any) => u.rol === 'soporte_ti';
-const veStats = (u: any) => u.rol === 'soporte_ti' || u.rol === 'directivo';
+const interviene = (u: any) => tiene(u, 'tecnico', 'soporte_ti');
+const gestiona = (u: any) => tiene(u, 'soporte_ti');
+const veStats = (u: any) => tiene(u, 'soporte_ti', 'directivo');
+const reporta = (u: any) => tiene(u, 'reportante');
 
 // ============================================================
 // 2. COMPONENTES REUTILIZABLES DE INTERFAZ
@@ -157,6 +229,87 @@ const Err = ({ m }: any) =>
       {m}
     </p>
   ) : null;
+
+const Ok = ({ m }: any) =>
+  m ? (
+    <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+      {m}
+    </p>
+  ) : null;
+
+// La foto de perfil vive en un bucket privado: solo existe como URL firmada que la API entrega
+// por GET /users/:id/avatar (el dueño o Soporte TI). Se pide una vez por cuenta y se cachea,
+// porque esa firma caduca a la hora y repetir la llamada en cada render saldría cara.
+const AVATAR = new Map<string, string | null>();
+
+const avatarFirmado = async (id: string) => {
+  if (AVATAR.has(id)) return AVATAR.get(id) ?? null;
+  try {
+    const d: any = await api(`/users/${id}/avatar`);
+    const u = d?.avatar?.url || null;
+    AVATAR.set(id, u);
+    return u;
+  } catch {
+    return null;
+  }
+};
+
+const Avatar = ({ id, nombre, src, cls = 'h-8 w-8 text-xs' }: any) => {
+  const [url, setUrl] = useState<string | null>(
+    src !== undefined ? src : id ? AVATAR.get(id) ?? null : null,
+  );
+
+  useEffect(() => {
+    // El cleanup va primero: un efecto que devuelve un valor (aquí el resultado de setUrl)
+    // confunde a React y deja la vista colgada.
+    let vivo = true;
+    if (src !== undefined) {
+      setUrl(src);
+    } else if (!id) {
+      setUrl(null);
+    } else {
+      avatarFirmado(id).then((u) => vivo && setUrl(u));
+    }
+    return () => {
+      vivo = false;
+    };
+  }, [id, src]);
+
+  const inicial = String(nombre || '?').trim().charAt(0).toUpperCase();
+
+  return url ? (
+    <img
+      src={url}
+      alt={`Foto de perfil de ${nombre || 'la cuenta'}`}
+      onError={() => setUrl(null)}
+      className={cls + ' shrink-0 rounded-full object-cover'}
+    />
+  ) : (
+    <span
+      aria-hidden="true"
+      className={cls + ' grid shrink-0 place-items-center rounded-full bg-slate-100 font-semibold text-slate-500'}
+    >
+      {inicial}
+    </span>
+  );
+};
+
+// Una pantalla que el conjunto de roles no autoriza se explica en lugar de quedar en blanco:
+// con varios roles, saber qué rol falta es la única pista útil para el usuario.
+const SinRol = ({ roles, accion }: any) => (
+  <div className="space-y-4">
+    <Page
+      t="Acción no disponible"
+      s={`Tu cuenta (${roles}) no incluye el rol necesario para ${accion}.`}
+    />
+
+    <Card className="p-5 text-sm text-slate-600">
+      Pide a un perfil de <b>Soporte TI</b> que te asigne el rol desde{' '}
+      <b>Usuarios → Asignar roles</b>. Si tú eres Soporte TI, abre esa misma pantalla sobre tu
+      propia cuenta y marca el rol que necesitas; el cambio se aplica sin cerrar la sesión.
+    </Card>
+  </div>
+);
 
 const Pill = ({
   t,
@@ -182,6 +335,28 @@ const Lbl = ({ children }: any) => (
   <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-slate-500">
     {children}
   </span>
+);
+
+// Fuera de las vistas y controlado: un <select> definido dentro de
+// un componente cambia de identidad en cada render, React lo
+// desmonta y el valor vuelve al primer <option> («Todos»).
+const Sel = ({ l, o, all, v, on }: any) => (
+  <label className="block">
+    <Lbl>{l}</Lbl>
+
+    <select
+      className={inp}
+      aria-label={l}
+      value={v ?? ''}
+      onChange={(x) => on(x.target.value)}
+    >
+      <option value="">{all}</option>
+
+      {o.map((x: string) => (
+        <option key={x}>{x}</option>
+      ))}
+    </select>
+  </label>
 );
 
 const Head = ({ n, t, s }: any) => (
@@ -504,7 +679,7 @@ function Tabla({ items, go }: any) {
 // 5. PANEL PRINCIPAL
 // ============================================================
 
-function Dashboard({ user, go }: any) {
+function Dashboard({ user, go, enAtlas }: any) {
   const [s, setS] = useState<any>(null);
   const [r, setR] = useState<any>({ items: [] });
   const [e, setE] = useState('');
@@ -552,10 +727,10 @@ function Dashboard({ user, go }: any) {
   ];
 
   const encabezado =
-    user.rol === 'tecnico'
-      ? ['Mi bandeja de trabajo', 'Incidencias asignadas a ti, ordenadas por fecha.']
-      : user.rol === 'soporte_ti'
-        ? ['Centro de monitoreo', 'Estado operativo del campus y incidencias priorizadas.']
+    gestiona(user)
+      ? ['Centro de monitoreo', 'Estado operativo del campus y incidencias priorizadas.']
+      : tiene(user, 'tecnico')
+        ? ['Mi bandeja de trabajo', 'Incidencias asignadas a ti, ordenadas por fecha.']
         : [`Hola, ${user.nombre}`, 'Consulta el avance de tus reportes o registra uno nuevo.'];
 
   return (
@@ -584,15 +759,16 @@ function Dashboard({ user, go }: any) {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>
             <h2 className="text-sm font-semibold text-slate-900">
-              {user.rol === 'soporte_ti'
+              {gestiona(user)
                 ? 'Incidencias prioritarias recientes'
-                : user.rol === 'tecnico'
+                : tiene(user, 'tecnico')
                   ? 'Asignadas a ti'
                   : 'Mis incidencias recientes'}
             </h2>
 
             <p className="text-xs text-slate-500">
-              Documentos indexados en MongoDB Atlas
+              Documentos indexados en{' '}
+              {enAtlas ? 'MongoDB Atlas' : 'la base conectada'}
             </p>
           </div>
 
@@ -630,6 +806,8 @@ function Lista({ go, init, user, soloPendientes }: any) {
 
   const [e, setE] = useState('');
 
+  const edificios = useEdificios();
+
   useEffect(() => {
     const q = new URLSearchParams(
       Object.entries(f).filter(([, v]) => v) as any
@@ -640,26 +818,9 @@ function Lista({ go, init, user, soloPendientes }: any) {
       .catch((x) => setE(x.message));
   }, [f]);
 
-  const set = (k: string) => (x: any) =>
-    setF({
-      ...f,
-      [k]: x.target.value,
-      page: 1,
-    });
-
-  const Sel = ({ k, l, o, all }: any) => (
-    <label className="block">
-      <Lbl>{l}</Lbl>
-
-      <select className={inp} aria-label={l} onChange={set(k)}>
-        <option value="">{all}</option>
-
-        {o.map((x: string) => (
-          <option key={x}>{x}</option>
-        ))}
-      </select>
-    </label>
-  );
+  const set =
+    (k: string) => (value: string) =>
+      setF((p: any) => ({ ...p, [k]: value, page: 1 }));
 
   const Titulos: any = {
     reportante: ['Mis incidencias', 'Reportes que tú registraste y su avance.'],
@@ -669,7 +830,7 @@ function Lista({ go, init, user, soloPendientes }: any) {
 
   const [lt, ls] = soloPendientes
     ? ['Incidencias por autorizar', 'Solicitudes pendientes de aprobación (RF-06).']
-    : Titulos[user.rol] || Titulos.reportante;
+    : Titulos[rolesDe(user).find((r) => Titulos[r]) || 'reportante'];
 
   return (
     <div className="space-y-4">
@@ -682,12 +843,12 @@ function Lista({ go, init, user, soloPendientes }: any) {
           <input
             className={inp}
             aria-label="Buscar por título o descripción"
-            defaultValue={init}
+            value={f.q ?? ''}
             placeholder="Buscar por título o descripción…"
-            onChange={set('q')}
+            onChange={(x) => set('q')(x.target.value)}
           />
 
-          {(user.rol === 'reportante' || gestiona(user)) && (
+          {reporta(user) && (
             <button
               className={btn + ' whitespace-nowrap sm:hidden'}
               onClick={() => go({ v: 'nueva' })}
@@ -699,31 +860,35 @@ function Lista({ go, init, user, soloPendientes }: any) {
 
         <div className="grid gap-3 md:grid-cols-5">
           <Sel
-            k="categoria"
             l="Categoría"
             o={CATS}
             all="Todas"
+            v={f.categoria}
+            on={set('categoria')}
           />
 
           <Sel
-            k="estado"
             l="Estado"
             o={ESTADOS}
             all="Todos"
+            v={f.estado}
+            on={set('estado')}
           />
 
           <Sel
-            k="prioridad"
             l="Prioridad"
             o={PRIOS}
             all="Cualquiera"
+            v={f.prioridad}
+            on={set('prioridad')}
           />
 
           <Sel
-            k="edificio"
             l="Ubicación"
-            o={EDIF}
+            o={edificios}
             all="Todo el campus"
+            v={f.edificio}
+            on={set('edificio')}
           />
 
           <label className="block">
@@ -732,7 +897,8 @@ function Lista({ go, init, user, soloPendientes }: any) {
             <input
               className={inp}
               placeholder="WiFi"
-              onChange={set('etiqueta')}
+              value={f.etiqueta ?? ''}
+              onChange={(x) => set('etiqueta')(x.target.value)}
             />
           </label>
         </div>
@@ -792,7 +958,9 @@ function Lista({ go, init, user, soloPendientes }: any) {
 // 7. REGISTRO DE NUEVAS INCIDENCIAS
 // ============================================================
 
-function Nueva({ go, user }: any) {
+function Nueva({ go, user, enAtlas, storage }: any) {
+  const edificios = useEdificios();
+
   const [f, setF] = useState<any>({
     categoria: CATS[0],
     prioridad: 'Media',
@@ -804,12 +972,25 @@ function Nueva({ go, user }: any) {
   const [files, setFiles] = useState<File[]>([]);
   const [e, setE] = useState('');
   const [b, setB] = useState(false);
+  const errRef = useRef<HTMLDivElement>(null);
+
+  // Un aviso abajo de un formulario largo no se ve si el foco está arriba: se trae a pantalla.
+  useEffect(() => {
+    if (e) errRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [e]);
 
   const fields = () => {
     const datos: any = {};
 
     for (const c of CAMPOS_CAT[f.categoria] || []) {
-      const v = (f.cat?.[c.k] || '').toString().trim();
+      let v = (f.cat?.[c.k] || '').toString().trim();
+      if (c.k === 'vlan' && v) {
+        const digitos = v.replace(/[^\d]/g, '');
+        if (digitos) v = digitos;
+      }
+      if (c.k === 'direccion_ip' && v) {
+        v = v.replace(/\.+$/, '').trim();
+      }
       if (v) datos[c.k] = v;
     }
 
@@ -878,7 +1059,17 @@ function Nueva({ go, user }: any) {
         body: toFD(fields(), files),
       });
 
-      go({ v: 'detalle', id: d._id });
+      go({
+        v: 'detalle',
+        id: d._id,
+        ok:
+          `Incidencia ${d.folio} registrada en MongoDB` +
+          (d.evidencias?.length
+            ? ` con ${d.evidencias.length} archivo(s) en su bucket`
+            : d.aviso
+              ? '. ' + d.aviso
+              : ''),
+      });
     } catch (x: any) {
       if (x instanceof TypeError) {
         await draft();
@@ -893,20 +1084,20 @@ function Nueva({ go, user }: any) {
   const add = (l: FileList | null) => {
     const selected = [...(l || [])];
 
-    const ok = selected.filter(
-      (x) =>
-        [
-          'image/jpeg',
-          'image/png',
-          'application/pdf',
-        ].includes(x.type) && x.size <= 15e6
-    );
+    const ok = selected.filter(cupo);
 
     if (ok.length < selected.length) {
-      setE('Solo JPG, PNG o PDF de máx. 15 MB');
+      setE('Solo imágenes (JPG, PNG, WebP · máx. 10 MB) o documentos (PDF, DOC, DOCX, XLS, XLSX, TXT · máx. 20 MB)');
     }
 
     setFiles([...files, ...ok].slice(0, 5));
+  };
+
+  // Quitar un archivo antes de enviar: todavía no tocó Supabase, así que solo se retira de la
+  // selección local. El <input> se remonta con `key` para que vuelva a aceptar el mismo nombre.
+  const quita = (i: number) => {
+    setFiles(files.filter((_, j) => j !== i));
+    setE('');
   };
 
   return (
@@ -914,10 +1105,14 @@ function Nueva({ go, user }: any) {
       <div className="space-y-5 lg:col-span-2">
         <Page
           t="Registrar incidencia"
-          s="El ticket recibirá folio automático y se indexará en MongoDB Atlas."
+          s={
+            'El ticket recibirá folio automático y se indexará en ' +
+            (enAtlas ? 'MongoDB Atlas.' : 'la base de datos conectada.')
+          }
         />
 
-        <Err m={e} />
+        {/* El aviso de validación se muestra junto a los botones de acción: es donde ocurre
+            el clic y antes quedaba fuera de la pantalla. */}
 
         {/* Información general */}
 
@@ -1084,7 +1279,7 @@ function Nueva({ go, user }: any) {
                   setF({ ...f, edificio: x.target.value })
                 }
               >
-                {EDIF.map((x) => (
+                {edificios.map((x: string) => (
                   <option key={x}>{x}</option>
                 ))}
               </select>
@@ -1161,17 +1356,21 @@ function Nueva({ go, user }: any) {
             className={inp}
             value={tag}
             aria-label="Etiqueta nueva"
-            placeholder="Escribe una etiqueta y pulsa Enter…"
+            placeholder="Escribe una etiqueta y pulsa Enter (o separa por comas)…"
             onChange={(x) => setTag(x.target.value)}
             onKeyDown={(x) => {
-              if (x.key === 'Enter' && tag.trim()) {
+              if ((x.key === 'Enter' || x.key === ',') && tag.trim()) {
                 x.preventDefault();
+                const nuevas = tag
+                  .split(',')
+                  .map((t) => t.trim().replace(/[#.]/g, ''))
+                  .filter(Boolean);
 
                 setF({
                   ...f,
                   tags: [
                     ...f.tags,
-                    tag.trim().replace('#', ''),
+                    ...nuevas,
                   ],
                 });
 
@@ -1187,7 +1386,7 @@ function Nueva({ go, user }: any) {
           <Head
             n="4"
             t="Evidencias"
-            s="JPG, PNG o PDF · máx. 15 MB por archivo · hasta 5"
+            s="Imágenes 10 MB · documentos 20 MB · hasta 5 archivos"
           />
 
           <label className="block cursor-pointer rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500 transition-colors hover:border-emerald-400 hover:text-emerald-700">
@@ -1196,52 +1395,80 @@ function Nueva({ go, user }: any) {
             </p>
 
             <input
+              key={'ev-' + files.length}
               type="file"
               multiple
               hidden
-              accept=".jpg,.jpeg,.png,.pdf"
+              accept={ACEPTA_EV}
               onChange={(x) => add(x.target.files)}
             />
           </label>
 
+          {/* El servidor dice por qué no puede escribir en Supabase: sin esto el archivo parece
+              guardarse y desaparece al recargar el expediente. */}
+          {storage && !storage.hay && files.length > 0 && (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              El servidor no puede guardar archivos: {storage.motivo} Se crearán el expediente y su
+              folio, pero las evidencias se descartarán.
+            </p>
+          )}
+
           {files.map((x, i) => (
             <p
               key={`${x.name}-${i}`}
-              className="mt-2 flex justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"
+              className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"
             >
               <span className="truncate">{x.name}</span>
 
-              <span className="text-slate-400">
-                {(x.size / 1e6).toFixed(1)} MB
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                  {destino(x.type)} · {(x.size / 1e6).toFixed(1)} MB
+                </span>
+
+                <button
+                  type="button"
+                  className="rounded-md px-1.5 py-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                  onClick={() => quita(i)}
+                  aria-label={`Quitar ${x.name} de las evidencias`}
+                  title="Quitar este archivo"
+                >
+                  ✕
+                </button>
               </span>
             </p>
           ))}
         </Card>
 
-        {/* Acciones */}
+        {/* Acciones: el aviso de validación va aquí, junto al botón que lo provoca */}
 
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <button
-            className="text-sm text-slate-500 hover:text-slate-800"
-            onClick={() => go({ v: 'lista' })}
-          >
-            Cancelar
-          </button>
+        <div className="space-y-3">
+          <div ref={errRef}>
+            <Err m={e} />
+          </div>
 
-          <button
-            className={ghost}
-            onClick={draft}
-          >
-            Guardar borrador (offline)
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              className="text-sm text-slate-500 hover:text-slate-800"
+              onClick={() => go({ v: 'lista' })}
+            >
+              Cancelar
+            </button>
 
-          <button
-            className={btn}
-            disabled={b}
-            onClick={send}
-          >
-            {b ? 'Guardando…' : 'Guardar y generar folio'}
-          </button>
+            <button
+              className={ghost}
+              onClick={draft}
+            >
+              Guardar borrador (offline)
+            </button>
+
+            <button
+              className={btn}
+              disabled={b}
+              onClick={send}
+            >
+              {b ? 'Guardando…' : 'Guardar y generar folio'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1297,10 +1524,11 @@ function Nueva({ go, user }: any) {
 // 8. DETALLE DE INCIDENCIA E INTERVENCIONES
 // ============================================================
 
-function Detalle({ id, user, go }: any) {
+function Detalle({ id, user, go, ok }: any) {
   const [d, setD] = useState<any>(null);
   const [tec, setTec] = useState<any[]>([]);
   const [e, setE] = useState('');
+  const [okx, setOkx] = useState(ok || '');
   const [ne, setNe] = useState('');
   const [ce, setCe] = useState('');
   const [mot, setMot] = useState('');
@@ -1370,10 +1598,20 @@ function Detalle({ id, user, go }: any) {
       setSub(true);
 
       try {
-        await api(`/incidencias/${id}/evidencias`, {
+        const r: any = await api(`/incidencias/${id}/evidencias`, {
           method: 'POST',
           body: fd,
         });
+
+        const cubos = [
+          ...new Set(
+            (r.evidencias || []).slice(-nf.length).map((x: any) => x.bucket)
+          ),
+        ];
+
+        setOkx(
+          `${nf.length} archivo(s) guardado(s)${cubos.length ? ' en ' + cubos.join(' y ') : ''}`
+        );
 
         setNf([]);
       } finally {
@@ -1394,10 +1632,14 @@ function Detalle({ id, user, go }: any) {
     0
   );
 
+  // Espejo del servidor: puede adjuntar quien tiene el rol en el conjunto y le corresponde
+  // el expediente (Soporte TI ve todos, el técnico los asignados, el reportante los propios).
   const puedeAdjuntar =
     d.estado !== 'Cerrada' &&
-    (admin ||
-      (user.rol === 'reportante' &&
+    (gestiona(user) ||
+      (tiene(user, 'tecnico') &&
+        String(d.tecnico?.id || '') === String(user.id)) ||
+      (reporta(user) &&
         String(d.reportante?.id || '') === String(user.id)));
 
   const opcionesEstado = (TRANSICIONES[d.estado] || []).filter(
@@ -1420,6 +1662,8 @@ function Detalle({ id, user, go }: any) {
       </p>
 
       <Err m={e} />
+
+      <Ok m={okx} />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -1605,6 +1849,11 @@ function Detalle({ id, user, go }: any) {
 
                   <p className="truncate border-t border-slate-100 px-2 py-1.5 text-[11px] text-slate-500">
                     {x.nombre} · {(x.size / 1e6).toFixed(1)} MB
+                    {x.bucket && (
+                      <span className="ml-2 uppercase tracking-wide text-[10px] text-slate-400">
+                        {x.bucket}
+                      </span>
+                    )}
                   </p>
                 </div>
               ))}
@@ -1619,31 +1868,25 @@ function Detalle({ id, user, go }: any) {
             {puedeAdjuntar && (
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <label className={lbl} htmlFor="ev-nuevas">
-                  Añadir evidencia (JPG, PNG o PDF · máx. 15 MB · hasta 5
+                  Añadir evidencia (imágenes 10 MB · documentos 20 MB · hasta 5
                   archivos)
                 </label>
 
                 <input
+                  key={'ev-nuevas-' + nf.length}
                   id="ev-nuevas"
                   type="file"
                   multiple
-                  accept="image/jpeg,image/png,application/pdf"
+                  accept={ACEPTA_EV}
                   className={inp}
                   onChange={(x) => {
                     const sel = [...(x.target.files || [])];
 
-                    const ok = sel.filter(
-                      (f) =>
-                        [
-                          'image/jpeg',
-                          'image/png',
-                          'application/pdf',
-                        ].includes(f.type) && f.size <= 15e6
-                    );
+                    const ok = sel.filter(cupo);
 
                     if (ok.length < sel.length) {
                       setE(
-                        'Solo se aceptan JPG, PNG o PDF de máximo 15 MB'
+                        'Solo imágenes (10 MB) o documentos (20 MB): JPG, PNG, WebP, PDF, DOC, DOCX, XLS, XLSX o TXT'
                       );
                     }
 
@@ -1652,27 +1895,54 @@ function Detalle({ id, user, go }: any) {
                 />
 
                 {!!nf.length && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-slate-500">
-                      {nf.map((f) => f.name).join(', ')}
-                    </span>
+                  <div className="mt-2 space-y-2">
+                    <ul className="space-y-1">
+                      {nf.map((f, i) => (
+                        <li
+                          key={f.name + i}
+                          className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
+                        >
+                          <span className="truncate">{f.name}</span>
 
-                    <button
-                      className={btn}
-                      disabled={sub}
-                      onClick={subirEvidencias}
-                    >
-                      {sub
-                        ? 'Subiendo…'
-                        : 'Subir ' + nf.length + ' archivo(s)'}
-                    </button>
+                          <span className="flex shrink-0 items-center gap-2">
+                            <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                              {(f.size / 1e6).toFixed(1)} MB
+                            </span>
 
-                    <button
-                      className={ghost}
-                      onClick={() => setNf([])}
-                    >
-                      Descartar
-                    </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNf(nf.filter((_, j) => j !== i))
+                              }
+                              aria-label={`Quitar ${f.name} de la subida`}
+                              title="Quitar este archivo"
+                              className="rounded-md px-1.5 py-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        className={btn}
+                        disabled={sub}
+                        onClick={subirEvidencias}
+                      >
+                        {sub
+                          ? 'Subiendo…'
+                          : 'Subir ' + nf.length + ' archivo(s)'}
+                      </button>
+
+                      <button
+                        className={ghost}
+                        onClick={() => setNf([])}
+                      >
+                        Descartar todo
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2081,6 +2351,8 @@ function Stats({ user }: any) {
   const [xf, setXf] = useState<any>({});
   const [bx, setBx] = useState(false);
 
+  const edificios = useEdificios();
+
   useEffect(() => {
     api('/stats')
       .then(setS)
@@ -2174,6 +2446,7 @@ function Stats({ user }: any) {
               type="date"
               className={inp}
               aria-label="Fecha desde"
+              value={xf.desde ?? ''}
               onChange={(x) =>
                 setXf({
                   ...xf,
@@ -2190,6 +2463,7 @@ function Stats({ user }: any) {
               type="date"
               className={inp}
               aria-label="Fecha hasta"
+              value={xf.hasta ?? ''}
               onChange={(x) =>
                 setXf({
                   ...xf,
@@ -2199,47 +2473,21 @@ function Stats({ user }: any) {
             />
           </label>
 
-          <label className="block">
-            <Lbl>Estado</Lbl>
+          <Sel
+            l="Estado"
+            o={ESTADOS}
+            all="Todos"
+            v={xf.estado}
+            on={(x: string) => setXf({ ...xf, estado: x })}
+          />
 
-            <select
-              className={inp}
-              aria-label="Filtrar por estado"
-              onChange={(x) =>
-                setXf({
-                  ...xf,
-                  estado: x.target.value,
-                })
-              }
-            >
-              <option value="">Todos</option>
-
-              {ESTADOS.map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block">
-            <Lbl>Edificio</Lbl>
-
-            <select
-              className={inp}
-              aria-label="Filtrar por edificio"
-              onChange={(x) =>
-                setXf({
-                  ...xf,
-                  edificio: x.target.value,
-                })
-              }
-            >
-              <option value="">Todos</option>
-
-              {EDIF.map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-          </label>
+          <Sel
+            l="Edificio"
+            o={edificios}
+            all="Todo el campus"
+            v={xf.edificio}
+            on={(x: string) => setXf({ ...xf, edificio: x })}
+          />
 
           {gestiona(user) && (
             <>
@@ -2539,7 +2787,7 @@ function Usuarios({ user }: any) {
   const [pg, setPg] = useState(1);
   const [men, setMen] = useState<any>(null);
   const [cambio, setCambio] = useState<any>(null);
-  const [elegido, setElegido] = useState('');
+  const [sel, setSel] = useState<string[]>([]);
   const [borrar, setBorrar] = useState<any>(null);
   const [elim, setElim] = useState(false);
   const cancelar = useRef<any>(null);
@@ -2619,7 +2867,7 @@ function Usuarios({ user }: any) {
   const fila = (u: any) =>
     `${u.nombre} ${u.email}`.toLowerCase().includes(seek);
 
-  const filtrados = lista.filter((u) => fila(u) && (!rolF || u.rol === rolF));
+  const filtrados = lista.filter((u) => fila(u) && (!rolF || rolesDe(u).includes(rolF)));
   const pag = Math.max(1, Math.ceil(filtrados.length / POR));
   const ver = Math.min(pg, pag);
   const visibles = filtrados.slice((ver - 1) * POR, ver * POR);
@@ -2633,30 +2881,39 @@ function Usuarios({ user }: any) {
 
   // El menú de los tres puntos se dibuja sobre el viewport: dentro de la tabla
   // el overflow de la card y la transformación del hover lo recortaban.
-  const ANCHO_MEN = 176;
-  const ALTO_MEN = 78;
+  const ANCHO_MEN = 190;
+  // Tu cuenta solo ofrece "Asignar roles": la baja y el cambio de rol propio los hace otra cuenta.
+  const altoMenu = (u: any) => (esYo(u) ? 40 : 78);
 
   const abreMen = (u: any, e: any) => {
     if (men?.u?.id === u.id) return setMen(null);
 
     const r = e.currentTarget.getBoundingClientRect();
-    const cabeAbajo = r.bottom + 6 + ALTO_MEN < window.innerHeight;
+    const alto = altoMenu(u);
+    const cabeAbajo = r.bottom + 6 + alto < window.innerHeight;
 
     setMen({
       u,
-      top: cabeAbajo ? r.bottom + 6 : Math.max(8, r.top - 6 - ALTO_MEN),
+      top: cabeAbajo ? r.bottom + 6 : Math.max(8, r.top - 6 - alto),
       left: Math.min(Math.max(8, r.right - ANCHO_MEN), window.innerWidth - ANCHO_MEN - 8),
     });
   };
 
-  const aplicarRol = async (rol: string) => {
+  const aplicarRoles = async () => {
     setM('');
     setOk('');
 
     try {
-      await api(`/users/${cambio.id}/rol`, { method: 'PATCH', body: { rol } });
-      setOk(`El rol de ${cambio.nombre} ahora es ${ROL_LABEL[rol]}`);
+      const r: any = await api(`/users/${cambio.id}/roles`, {
+        method: 'PUT',
+        body: { roles: sel },
+      });
+      setOk(
+        `Roles de ${cambio.nombre}: ${(r.roles || []).map((x: string) => ROL_LABEL[x] || x).join(', ')}`
+      );
       setCambio(null);
+      // Si el cambio se aplicó sobre la cuenta propia, la navegación debe actualizarse ya.
+      window.dispatchEvent(new Event('sesion-cambiada'));
       await load();
     } catch (x: any) {
       setM(x.message);
@@ -2780,10 +3037,17 @@ function Usuarios({ user }: any) {
                 visibles.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/70">
                     <td className="px-5 py-3">
-                      <p className="font-medium text-slate-800">{u.nombre}</p>
-                      <p className="font-mono text-[11px] text-slate-400">
-                        {String(u.id).slice(-6).toUpperCase()}
-                      </p>
+                      <div className="flex items-center gap-2.5">
+                        <Avatar id={u.id} nombre={u.nombre} />
+
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-slate-800">{u.nombre}</p>
+
+                          <p className="font-mono text-[11px] text-slate-400">
+                            {String(u.id).slice(-6).toUpperCase()}
+                          </p>
+                        </div>
+                      </div>
                     </td>
 
                     <td className="px-3 py-3 text-xs text-slate-600">
@@ -2791,13 +3055,20 @@ function Usuarios({ user }: any) {
                     </td>
 
                     <td className="px-3 py-3">
-                      <span
-                        className={
-                          'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ' +
-                          (BADGE[u.rol] || 'bg-slate-100 text-slate-700')
-                        }
-                      >
-                        {ROL_LABEL[u.rol] || u.rol}
+                      <span className="flex flex-wrap gap-1">
+                        {rolesDe(u).map((r) => (
+                          <span
+                            key={r}
+                            title={ROL_DESC[r]}
+                            className={
+                              'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ' +
+                              (BADGE[r] || 'bg-slate-100 text-slate-700')
+                            }
+                          >
+                            {ROL_LABEL[r] || r}
+                            {r === u.rol && rolesDe(u).length > 1 ? ' ·' : ''}
+                          </span>
+                        ))}
                       </span>
                     </td>
 
@@ -2810,21 +3081,15 @@ function Usuarios({ user }: any) {
                     </td>
 
                     <td className="px-3 py-3 text-right" data-menu>
-                      {esYo(u) ? (
-                        <p className="text-[11px] text-slate-400">
-                          Tu cuenta · el rol y la baja los gestiona otro perfil de Soporte TI
-                        </p>
-                      ) : (
-                        <button
-                          className={ghost + ' px-2 py-1'}
-                          aria-label={`Acciones de ${u.nombre}`}
-                          aria-haspopup="menu"
-                          aria-expanded={men?.u?.id === u.id}
-                          onClick={(e) => abreMen(u, e)}
-                        >
-                          ⋯
-                        </button>
-                      )}
+                      <button
+                        className={ghost + ' px-2 py-1'}
+                        aria-label={`Acciones de ${u.nombre}`}
+                        aria-haspopup="menu"
+                        aria-expanded={men?.u?.id === u.id}
+                        onClick={(e) => abreMen(u, e)}
+                      >
+                        ⋯
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -2882,26 +3147,28 @@ function Usuarios({ user }: any) {
                 className="block w-full px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
                 onClick={() => {
                   setMen(null);
-                  setElegido('');
+                  setSel(rolesDe(men.u));
                   setCambio(men.u);
                 }}
               >
-                Cambiar rol
+                Asignar roles
               </button>
             </li>
 
-            <li role="none">
-              <button
-                role="menuitem"
-                className="block w-full px-3 py-1.5 text-left text-xs text-red-700 hover:bg-red-50"
-                onClick={() => {
-                  setMen(null);
-                  setBorrar(men.u);
-                }}
-              >
-                Eliminar cuenta
-              </button>
-            </li>
+            {!esYo(men.u) && (
+              <li role="none">
+                <button
+                  role="menuitem"
+                  className="block w-full px-3 py-1.5 text-left text-xs text-red-700 hover:bg-red-50"
+                  onClick={() => {
+                    setMen(null);
+                    setBorrar(men.u);
+                  }}
+                >
+                  Eliminar cuenta
+                </button>
+              </li>
+            )}
           </ul>,
           document.body
         )}
@@ -2919,48 +3186,60 @@ function Usuarios({ user }: any) {
             className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
           >
             <h3 id="rol-t" className="text-sm font-semibold text-slate-900">
-              Cambiar el rol de {cambio.nombre}
+              Asignar roles a {cambio.nombre}
             </h3>
 
             <p className="mt-1 text-xs text-slate-500">
-              {cambio.email} · rol actual:{' '}
-              <b className="text-slate-700">{ROL_LABEL[cambio.rol] || cambio.rol}</b>
+              {cambio.email} · roles actuales:{' '}
+              <b className="text-slate-700">
+                {rolesDe(cambio).map((r) => ROL_LABEL[r] || r).join(', ')}
+              </b>
+            </p>
+
+            <p className="mt-2 text-[11px] leading-snug text-slate-500">
+              La cuenta puede tener varios roles a la vez y suma los permisos de todos.
+              El marcado con «·» es el rol activo con el que se identifica en la sesión.
             </p>
 
             <div className="mt-4 space-y-1.5">
-              {ROLES.filter((r) => r !== cambio.rol).map((r, i) => (
-                <label
-                  key={r}
-                  className={
-                    'flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2 transition-colors ' +
-                    (elegido === r
-                      ? 'border-emerald-300 bg-emerald-50'
-                      : 'border-slate-200 hover:bg-slate-50')
-                  }
-                >
-                  <input
-                    ref={(el) => {
-                      if (i === 0) enfoque.current = el;
-                    }}
-                    type="radio"
-                    name="rol-nuevo"
-                    value={r}
-                    checked={elegido === r}
-                    onChange={() => setElegido(r)}
-                    className="mt-0.5 accent-emerald-700"
-                  />
+              {ROLES.map((r, i) => {
+                const activo = sel.includes(r);
+                return (
+                  <label
+                    key={r}
+                    className={
+                      'flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2 transition-colors ' +
+                      (activo
+                        ? 'border-emerald-300 bg-emerald-50'
+                        : 'border-slate-200 hover:bg-slate-50')
+                    }
+                  >
+                    <input
+                      ref={(el) => {
+                        if (i === 0) enfoque.current = el;
+                      }}
+                      type="checkbox"
+                      aria-label={ROL_LABEL[r]}
+                      checked={activo}
+                      onChange={() =>
+                        setSel(activo ? sel.filter((x) => x !== r) : [...sel, r])
+                      }
+                      className="mt-0.5 accent-emerald-700"
+                    />
 
-                  <span>
-                    <span className="block text-sm font-medium text-slate-800">
-                      {ROL_LABEL[r]}
-                    </span>
+                    <span>
+                      <span className="block text-sm font-medium text-slate-800">
+                        {ROL_LABEL[r]}
+                        {r === cambio.rol ? ' ·' : ''}
+                      </span>
 
-                    <span className="block text-[11px] leading-snug text-slate-500">
-                      {ROL_DESC[r]}
+                      <span className="block text-[11px] leading-snug text-slate-500">
+                        {ROL_DESC[r]}
+                      </span>
                     </span>
-                  </span>
-                </label>
-              ))}
+                  </label>
+                );
+              })}
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
@@ -2973,10 +3252,10 @@ function Usuarios({ user }: any) {
 
               <button
                 className={btn + ' px-3 py-1.5 text-xs'}
-                onClick={() => aplicarRol(elegido)}
-                disabled={!elegido}
+                onClick={aplicarRoles}
+                disabled={!sel.length}
               >
-                Guardar cambio
+                Guardar {sel.length} rol(es)
               </button>
             </div>
           </div>
@@ -3044,6 +3323,11 @@ export default function App() {
 
   const [perfil, setPerfil] = useState(false);
 
+  // Selector de rol activo (patrón de Innovaplay): el diálogo y la elección pendiente viven
+  // aquí, antes del retorno temprano al login, para no cambiar el orden de los hooks.
+  const [rolDlg, setRolDlg] = useState(false);
+  const [rolEleg, setRolEleg] = useState<string | null>(null);
+
   // Al salir se descartan los borradores locales del dispositivo y la sesión guardada
   const salir = () => {
     Object.keys(localStorage).forEach((k) => {
@@ -3053,8 +3337,10 @@ export default function App() {
     });
 
     localStorage.removeItem('t');
+    olvidarRolActivo(user?.id);
 
     setPerfil(false);
+    setRolDlg(false);
     setUser(null);
     go({ v: 'inicio' });
   };
@@ -3068,6 +3354,84 @@ export default function App() {
     return () => document.removeEventListener('keydown', esc);
   }, [perfil]);
 
+  useEffect(() => {
+    if (!rolDlg) return;
+
+    const esc = (e: any) => e.key === 'Escape' && setRolDlg(false);
+    document.addEventListener('keydown', esc);
+
+    return () => document.removeEventListener('keydown', esc);
+  }, [rolDlg]);
+
+  // ----------------------------------------------------------
+  // Foto de perfil: bucket privado usuarios-archivos, visible solo por URL firmada
+  // ----------------------------------------------------------
+
+  const [foto, setFoto] = useState<string | null>(null);
+  const [fotoMsg, setFotoMsg] = useState('');
+  const [fotoOk, setFotoOk] = useState('');
+  const [fotoC, setFotoC] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setFoto(null);
+      return;
+    }
+
+    let vivo = true;
+
+    api(`/users/${user.id}/avatar`)
+      .then((d: any) => vivo && setFoto(d.avatar?.url || null))
+      .catch(() => vivo && setFoto(null));
+
+    return () => {
+      vivo = false;
+    };
+  }, [perfil, user?.id, user?.avatar?.fecha]);
+
+  const ponFoto = async (f?: File) => {
+    if (!f) return;
+
+    setFotoMsg('');
+    setFotoOk('');
+
+    // Comodidad local: el servidor repite estas reglas y además verifica el contenido real
+    if (!IMG.includes(f.type)) return setFotoMsg('La foto debe ser JPG, PNG o WebP');
+    if (f.size > LIM_FOTO) return setFotoMsg('La foto de perfil debe pesar menos de 5 MB');
+
+    const fd = new FormData();
+    fd.append('avatar', f);
+
+    setFotoC(true);
+
+    try {
+      const u = await api(`/users/${user.id}/avatar`, { method: 'PUT', body: fd });
+      setUser({ ...user, ...u });
+      const v = await api(`/users/${u.id}/avatar`);
+      setFoto(v.avatar?.url || null);
+      setFotoOk('Foto guardada en ' + (v.avatar?.bucket || 'el bucket de perfiles'));
+    } catch (x: any) {
+      setFotoMsg(x.message);
+    } finally {
+      setFotoC(false);
+    }
+  };
+
+  const quitaFoto = () => {
+    setFotoMsg('');
+    setFotoOk('');
+    setFotoC(true);
+
+    api(`/users/${user.id}/avatar`, { method: 'DELETE' })
+      .then((u: any) => {
+        setUser({ ...user, avatar: u.avatar });
+        setFoto(null);
+        setFotoOk('Foto eliminada también del almacenamiento');
+      })
+      .catch((x: any) => setFotoMsg(x.message))
+      .finally(() => setFotoC(false));
+  };
+
   // ----------------------------------------------------------
   // Recuperar sesión guardada
   // ----------------------------------------------------------
@@ -3080,16 +3444,53 @@ export default function App() {
       return;
     }
 
-    // La identidad y el rol se leen del servidor, nunca del token en claro
+    // La identidad y los roles se leen del servidor, nunca del token en claro
     api('/auth/me')
       .then((d: any) => {
         setUser(d);
-        go({ v: d.rol === 'directivo' ? 'stats' : 'inicio' });
+        go({ v: veStats(d) && !interviene(d) && !reporta(d) ? 'stats' : 'inicio' });
       })
       .catch(() => localStorage.removeItem('t'));
 
     setReady(true);
   }, []);
+
+  // Un cambio de roles lo decide el servidor en cada petición; la interfaz vuelve a leer la
+  // sesión al recuperar la pestaña (o tras una asignación hecha aquí) para que la navegación
+  // y las etiquetas coincidan con los permisos reales sin cerrar la sesión.
+  useEffect(() => {
+    if (!user) return;
+
+    const jala = () =>
+      api('/auth/me')
+        .then((d: any) => d && setUser((p: any) => ({ ...p, ...d })))
+        .catch(() => {});
+
+    window.addEventListener('focus', jala);
+    window.addEventListener('sesion-cambiada', jala);
+    document.addEventListener('visibilitychange', jala);
+
+    return () => {
+      window.removeEventListener('focus', jala);
+      window.removeEventListener('sesion-cambiada', jala);
+      document.removeEventListener('visibilitychange', jala);
+    };
+  }, [user]);
+
+  // Equivalente a ProtectedRoute del proyecto de referencia: si la pantalla abierta no
+  // pertenece al rol recién activado, se aterriza en el panel de ese rol en lugar de dejar
+  // la vista a medias. 'detalle' queda fuera porque es una ficha, no una sección del menú.
+  const SECCIONES = ['inicio', 'lista', 'nueva', 'pendientes', 'usuarios', 'stats', 'kb'];
+
+  useEffect(() => {
+    if (!user) return;
+    const act = rolActivo(user, rolesDe(user));
+    const permite: string[] = NAV_ROL[act] || [];
+
+    if (SECCIONES.includes(view?.v) && !permite.includes(view.v)) {
+      go({ v: VISTA_ROL[act] || 'inicio' });
+    }
+  }, [user, view?.v]);
 
   // ----------------------------------------------------------
   // Estado de conexión y sincronización offline
@@ -3098,6 +3499,28 @@ export default function App() {
   const [online, setOnline] = useState(
     navigator.onLine
   );
+
+  // Dónde escribe realmente la API conectada: la demo de dev:local es una base en memoria
+  const [almacen, setAlmacen] = useState<string | null>(null);
+  const [storage, setStorage] = useState<any>(null);
+
+  // Ningún texto de la interfaz afirma "MongoDB Atlas" sin que la API lo confirme
+  const enAtlas = almacen === 'atlas';
+
+  useEffect(() => {
+    let vivo = true;
+    estado()
+      .then((r: any) => {
+        if (vivo) {
+          setAlmacen(r?.almacen || null);
+          setStorage(r?.storage || null);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   const [pend, setPend] = useState(0);
   const [inst, setInst] = useState<any>(null);
@@ -3184,46 +3607,55 @@ export default function App() {
       <Login
         onLogin={(u: any) => {
           setUser(u);
-          go({ v: u.rol === 'directivo' ? 'stats' : 'inicio' });
+          go({ v: veStats(u) && !interviene(u) && !reporta(u) ? 'stats' : 'inicio' });
         }}
       />
     );
   }
 
   // ----------------------------------------------------------
-  // Navegación según el rol
+  // Navegación según el rol ACTIVO de la sesión. El conjunto `roles` es lo que el servidor
+  // autoriza (unión), pero la interfaz muestra solo las secciones del rol elegido, igual que
+  // los menús por rol del proyecto de referencia.
   // ----------------------------------------------------------
 
-  const nav = [
-    ...(user.rol === 'directivo'
-      ? [['stats', 'Panel de indicadores', '▮']]
-      : [
-          ['inicio', user.rol === 'tecnico' ? 'Mi bandeja' : 'Panel', '▦'],
-          [
-            'lista',
-            user.rol === 'reportante'
-              ? 'Mis incidencias'
-              : user.rol === 'tecnico'
-                ? 'Incidencias asignadas'
-                : 'Incidencias',
-            '▤',
-          ],
-        ]),
+  const activo = rolActivo(user, rolesDe(user));
+  const vistasRol: string[] = NAV_ROL[activo] || [];
 
-    ...(user.rol === 'reportante' || user.rol === 'soporte_ti'
-      ? [['nueva', 'Nueva incidencia', '+']]
-      : []),
+  const tituloLista = gestiona(user)
+    ? 'Incidencias'
+    : tiene(user, 'tecnico')
+      ? 'Incidencias asignadas'
+      : 'Mis incidencias';
 
-    ...(user.rol === 'soporte_ti'
-      ? [
-          ['pendientes', 'Por autorizar', '★'],
-          ['stats', 'Estadísticas', '▮'],
-          ['usuarios', 'Usuarios', '▨'],
-        ]
-      : []),
+  const nav = vistasRol.map((k: string) =>
+    k === 'inicio'
+      ? ['inicio', activo === 'tecnico' ? 'Mi bandeja' : 'Panel', '▦']
+      : k === 'lista'
+        ? ['lista', tituloLista, '▤']
+        : k === 'nueva'
+          ? ['nueva', 'Nueva incidencia', '+']
+          : k === 'pendientes'
+            ? ['pendientes', 'Por autorizar', '★']
+            : k === 'usuarios'
+              ? ['usuarios', 'Usuarios', '▨']
+              : k === 'stats'
+                ? ['stats', gestiona(user) ? 'Estadísticas' : 'Panel de indicadores', '▮']
+                : ['kb', 'Base de conocimiento', '?']
+  );
 
-    ['kb', 'Base de conocimiento', '?'],
-  ];
+  // Confirmar en el diálogo escribe activeRole_<id> y aterrizó en el panel del rol elegido;
+  // el token y los permisos del servidor no cambian, solo el contexto de trabajo.
+  const cambiarRol = () => {
+    if (!rolEleg || rolEleg === activo) {
+      setRolDlg(false);
+      return;
+    }
+    fijarRolActivo(user.id, rolEleg);
+    setRolDlg(false);
+    setUser({ ...user });
+    go({ v: VISTA_ROL[rolEleg] || 'inicio' });
+  };
 
   const Nav = ({ c = '' }: any) =>
     nav.map(([k, l, i]) => (
@@ -3273,15 +3705,33 @@ export default function App() {
         <span
           className={
             'hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] xl:inline ' +
-            (online
+            (online && enAtlas
               ? 'bg-emerald-50 text-emerald-700'
               : 'bg-amber-50 text-amber-700')
           }
         >
-          {online
-            ? '● Conectado · MongoDB Atlas'
-            : '● Sin conexión · ' + pend + ' borradores'}
+          {!online
+            ? '● Sin conexión · ' + pend + ' borradores'
+            : enAtlas
+              ? '● Conectado · MongoDB Atlas'
+              : almacen === 'local'
+                ? '● Conectado · base local (sin Atlas)'
+                : '● Conectado · almacén sin confirmar'}
         </span>
+
+        {storage && (
+          <span
+            title={storage.hay ? 'Buckets visibles: ' + storage.buckets.join(', ') : storage.motivo}
+            className={
+              'hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] xl:inline ' +
+              (storage.hay ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')
+            }
+          >
+            {storage.hay
+              ? '● Archivos · Supabase (' + (storage.buckets?.length || 0) + ' buckets)'
+              : '● Archivos sin guardar'}
+          </span>
+        )}
 
         {/* La búsqueda vive en el listado; el encabezado solo concentra acciones */}
 
@@ -3307,7 +3757,7 @@ export default function App() {
             </button>
           )}
 
-          {(user.rol === 'reportante' || gestiona(user)) && (
+          {vistasRol.includes('nueva') && (
             <button
               className={btn + ' hidden whitespace-nowrap sm:block'}
               onClick={() => go({ v: 'nueva' })}
@@ -3316,24 +3766,56 @@ export default function App() {
             </button>
           )}
 
-          <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 sm:block">
-            {ROL_LABEL[user.rol] || user.rol}
-          </span>
+          {/* Con un solo rol la etiqueta es estática; con varios se vuelve el selector de rol */}
+
+          {rolesDe(user).length > 1 ? (
+            <button
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+              aria-haspopup="dialog"
+              aria-expanded={rolDlg}
+              title={`${ROL_LABEL[activo] || activo} — cambiar de rol`}
+              onClick={() => {
+                setRolEleg(activo);
+                setRolDlg(true);
+              }}
+            >
+              <span
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${PUNTO_ROL[activo] || 'bg-slate-400'}`}
+              />
+
+              {ROL_LABEL[activo] || activo}
+
+              <span className="text-slate-400">▾</span>
+            </button>
+          ) : (
+            <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 sm:block">
+              {etiquetaRoles(user)}
+            </span>
+          )}
 
           <button
             className={
-              'grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-semibold transition-colors ' +
+              'grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-semibold transition-colors ' +
               (perfil
                 ? 'bg-emerald-100 text-emerald-800'
                 : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-800')
             }
-            aria-label={`${user.nombre}, ${ROL_LABEL[user.rol] || user.rol}. Ver mi perfil`}
+            aria-label={`${user.nombre}, ${etiquetaRoles(user)}. Ver mi perfil`}
             aria-haspopup="dialog"
             aria-expanded={perfil}
-            title={`${user.nombre} · ${ROL_LABEL[user.rol] || user.rol} — ver mi perfil`}
+            title={`${user.nombre} · ${etiquetaRoles(user)} — ver mi perfil`}
             onClick={() => setPerfil(!perfil)}
           >
-            {user.nombre?.[0] || 'U'}
+            {foto ? (
+              <img
+                src={foto}
+                alt={`Foto de perfil de ${user.nombre}`}
+                onError={() => setFoto(null)}
+                className="h-full w-full rounded-full object-cover"
+              />
+            ) : (
+              user.nombre?.[0] || 'U'
+            )}
           </button>
         </div>
       </header>
@@ -3352,12 +3834,20 @@ export default function App() {
 
           <div className="mt-auto rounded-lg border border-slate-100 bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-500">
             <b className="text-slate-600">
-              MongoDB Atlas
+              {enAtlas
+                ? 'MongoDB Atlas'
+                : almacen === 'local'
+                  ? 'Base de datos local'
+                  : 'Almacén sin confirmar'}
             </b>
 
             <br />
 
-            Clúster académico en la nube · colecciones sincronizadas.
+            {enAtlas
+              ? 'Clúster académico en la nube · colecciones sincronizadas.'
+              : almacen === 'local'
+                ? 'Ejecuta npm run dev (puerto 4000) para escribir en el clúster.'
+                : 'No hay API disponible para confirmar dónde se guardan los datos.'}
           </div>
         </aside>
 
@@ -3379,12 +3869,28 @@ export default function App() {
             </p>
           )}
 
+          {almacen === 'local' && (
+            <p role="status" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 print:hidden!">
+              Esta API no está conectada a <strong>MongoDB Atlas</strong>: lo que guardes se
+              escribe en una base local y con <code>npm run dev:local</code> es memoria
+              desechable que se pierde al reiniciar. Para trabajar sobre Atlas ejecuta{' '}
+              <code className="rounded bg-white px-1 py-0.5 text-xs">npm run dev</code> en
+              server/ y apunta{' '}
+              <code className="rounded bg-white px-1 py-0.5 text-xs">VITE_API_URL</code> de
+              client/.env.local a{' '}
+              <code className="rounded bg-white px-1 py-0.5 text-xs">
+                http://localhost:4000/api
+              </code>
+            </p>
+          )}
+
           {/* Enrutamiento interno de vistas */}
 
           {view.v === 'inicio' && (
             <Dashboard
               user={user}
               go={go}
+              enAtlas={enAtlas}
             />
           )}
 
@@ -3395,19 +3901,16 @@ export default function App() {
             />
           )}
 
-          {view.v === 'nueva' &&
-            (user.rol === 'reportante' || gestiona(user)) && (
-              <Nueva
-                go={go}
-                user={user}
-              />
-            )}
+          {view.v === 'nueva' && (reporta(user)
+            ? <Nueva go={go} user={user} enAtlas={enAtlas} storage={storage} />
+            : <SinRol roles={etiquetaRoles(user)} accion="registrar incidencias" />)}
 
           {view.v === 'detalle' && (
             <Detalle
               id={view.id}
               user={user}
               go={go}
+              ok={view.ok}
             />
           )}
 
@@ -3445,9 +3948,18 @@ export default function App() {
             className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
           >
             <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-base font-semibold text-emerald-800">
-                {user.nombre?.[0] || 'U'}
-              </span>
+              {foto ? (
+                <img
+                  src={foto}
+                  alt={`Foto de perfil de ${user.nombre}`}
+                  onError={() => setFoto(null)}
+                  className="h-10 w-10 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-base font-semibold text-emerald-800">
+                  {user.nombre?.[0] || 'U'}
+                </span>
+              )}
 
               <div className="min-w-0 flex-1">
                 <h3 id="perfil-t" className="truncate text-sm font-semibold text-slate-900">
@@ -3468,7 +3980,8 @@ export default function App() {
 
             <dl className="divide-y divide-slate-100 px-5 text-xs">
               {[
-                ['Rol activo', ROL_LABEL[user.rol] || user.rol],
+                ['Roles asignados', etiquetaRoles(user)],
+                ['Rol en uso', ROL_LABEL[activo] || activo],
                 ['Registro', fcha(user.creadoEn, true)],
                 ['Último acceso', fcha(user.ultimoAcceso)],
                 ['Identificador', String(user.id).slice(-8).toUpperCase()],
@@ -3480,8 +3993,59 @@ export default function App() {
               ))}
             </dl>
 
+            <div className="border-t border-slate-100 px-5 pt-3">
+              <p className={lbl}>
+                Foto de perfil · JPG, PNG o WebP · máx. 5 MB
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className={ghost + ' cursor-pointer px-3 py-1.5 text-xs'}>
+                  {fotoC
+                    ? 'Subiendo…'
+                    : user.avatar
+                      ? 'Cambiar foto'
+                      : 'Subir foto'}
+
+                  <input
+                    type="file"
+                    hidden
+                    disabled={fotoC}
+                    accept={ACEPTA_FOTO}
+                    onChange={(e) => {
+                      ponFoto(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+
+                {user.avatar && (
+                  <button
+                    className="text-xs text-slate-500 transition-colors hover:text-red-700 disabled:opacity-40"
+                    onClick={quitaFoto}
+                    disabled={fotoC}
+                  >
+                    Quitar foto
+                  </button>
+                )}
+              </div>
+
+              {!!fotoMsg && (
+                <p role="alert" className="mt-2 text-xs text-red-700">
+                  {fotoMsg}
+                </p>
+              )}
+
+              {!!fotoOk && (
+                <p role="status" className="mt-2 text-xs text-emerald-700">
+                  {fotoOk}
+                </p>
+              )}
+            </div>
+
             <p className="px-5 pb-1 pt-3 text-[11px] leading-relaxed text-slate-500">
-              {ROL_DESC[user.rol] ||
+              {rolesDe(user)
+                .map((r) => `${ROL_LABEL[r] || r}: ${ROL_DESC[r] || ''}`.trim())
+                .join(' · ') ||
                 'El rol se verifica en cada petición del servidor, no solo en la interfaz.'}
             </p>
 
@@ -3500,6 +4064,106 @@ export default function App() {
                 Cerrar sesión
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo de cambio de rol, adaptado de RoleSwitcherTopbar: tarjetas por rol asignado y
+          Cancelar/Confirmar. Lo que autoriza el servidor no cambia: se elige el contexto. */}
+
+      {rolDlg && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4"
+          role="presentation"
+          onClick={(e) => e.target === e.currentTarget && setRolDlg(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rol-t"
+            className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+          >
+            <div className="border-b border-slate-100 px-5 py-4 text-center">
+              <h3 id="rol-t" className="text-base font-semibold text-slate-900">
+                Cambiar de Rol
+              </h3>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Selecciona el rol que deseas usar en esta sesión.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 px-5 py-4">
+              {rolesDe(user).map((r: string) => {
+                const esAct = r === rolEleg;
+
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRolEleg(r)}
+                    className={
+                      'flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors ' +
+                      (esAct
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 bg-white hover:bg-slate-50')
+                    }
+                  >
+                    <span
+                      className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${PUNTO_ROL[r] || 'bg-slate-400'}`}
+                    />
+
+                    <span className="min-w-0 flex-1">
+                      <b className="block text-sm text-slate-900">
+                        {ROL_LABEL[r] || r}
+                        {r === activo && (
+                          <span className="ml-2 text-[11px] font-normal text-slate-500">
+                            (en uso)
+                          </span>
+                        )}
+                      </b>
+
+                      <span className="mt-0.5 block text-xs text-slate-500">
+                        {ROL_DESC[r] || ''}
+                      </span>
+                    </span>
+
+                    {esAct && (
+                      <span className="text-sm text-emerald-700" aria-hidden="true">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2 border-t border-slate-100 px-5 py-4">
+              <button
+                type="button"
+                className={ghost + ' flex-1'}
+                onClick={() => setRolDlg(false)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                className={btn + ' flex-1'}
+                disabled={!rolEleg || rolEleg === activo}
+                onClick={cambiarRol}
+              >
+                Confirmar
+              </button>
+            </div>
+
+            <p className="px-5 pb-4 text-[11px] leading-relaxed text-slate-500">
+              Tu cuenta tiene{' '}
+              {rolesDe(user).length}{' '}
+              roles asignados. El que actives decide el menú y la pantalla inicial; para{' '}
+              <b>añadir o quitar</b> roles hace falta un perfil de Soporte TI en{' '}
+              <b>Usuarios → Asignar roles</b>.
+            </p>
           </div>
         </div>
       )}

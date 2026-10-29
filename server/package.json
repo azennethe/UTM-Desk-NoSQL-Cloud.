@@ -2,11 +2,11 @@
   "name": "utm-desk-api",
   "type": "module",
   "scripts": {
-    "dev": "node --watch index.js",
-    "start": "node index.js",
+    "dev": "node --use-system-ca --watch index.js",
+    "start": "node --use-system-ca index.js",
     "dev:local": "node dev-local.mjs",
-    "seed": "node seed-demo.js",
-    "test": "node test/api.test.mjs"
+    "seed": "node --use-system-ca seed-demo.js",
+    "test": "node --use-system-ca test/api.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

@@ -3,12 +3,12 @@
     "_postman_id": "9c1f0a6e-4b0b-4d5e-9b1a-utm0desk0001",
     "name": "UTM Desk API — 4 roles, autorización RF-06/07 y errores",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Cobertura de la API de UTM Desk NoSQL Cloud.\n\nVariables: baseUrl (http://localhost:4100/api con `npm run dev:local`), tokenReportante, tokenTecnico, tokenSoporte, tokenDirectivo, id, idPendiente, tecnicoId, artId, idUsuario, idPropio, sufijo.\nsufijo forma parte de los correos de ejemplo (persona.prueba1@…, tecnico.nuevo1@…). Si repites la colección sobre la misma base, súbelo a 2, 3… para que los alta no choquen con 409 \"correo ya registrado\".\nEjecuta primero la carpeta Autenticación: los cuatro login guardan su token automáticamente.\nLos correos y contraseñas de ejemplo son las cuentas de demostración de server/seed-demo.js (Demo.2026). Sustitúyelos por tus credenciales reales si pruebas contra Atlas.\nCada petición declara en su descripción el código HTTP esperado; los tests lo comprueban."
+    "description": "Cobertura de la API de UTM Desk NoSQL Cloud.\n\nVariables: baseUrl (http://localhost:4000/api con `npm run dev`; usa http://localhost:4100/api si levantas `npm run dev:local`), tokenReportante, tokenTecnico, tokenSoporte, tokenDirectivo, id, idPendiente, tecnicoId, artId, idUsuario, idPropio, sufijo.\nsufijo forma parte de los correos de ejemplo (persona.prueba1@…, tecnico.nuevo1@…). Si repites la colección sobre la misma base, súbelo a 2, 3… para que los alta no choquen con 409 \"correo ya registrado\".\nEjecuta la colección completa en orden: los cuatro login de la carpeta 1 guardan su token en variables de colección. Si corres una petición suelta sin token, la API responde 401 «Sesión inválida» y no es un fallo del backend.\nLos correos y contraseñas de ejemplo son las cuentas de demostración de server/datos-demo (Demo.2026); existen en Atlas después de ejecutar `npm run seed`. Cambia la carpeta 1 si usas otras cuentas.\nCada petición declara en su descripción el código HTTP esperado; los tests lo comprueban."
   },
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:4100/api"
+      "value": "http://localhost:4000/api"
     },
     {
       "key": "tokenReportante",
@@ -52,13 +52,45 @@
     },
     {
       "key": "sufijo",
-      "value": "1"
+      "value": "3939"
+    },
+    {
+      "key": "tokenOtroTecnico",
+      "value": ""
+    },
+    {
+      "key": "otroTecnicoEmail",
+      "value": ""
     }
   ],
   "item": [
     {
       "name": "1. Autenticación y sesiones",
       "item": [
+        {
+          "name": "Estado del almacén: la API dice si escribe en Atlas o en local",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('almacen entre atlas y local', function () { pm.expect(['atlas','local']).to.include(pm.response.json().almacen); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/estado",
+              "query": []
+            },
+            "description": "Ruta pública que la interfaz consulta al cargar: devuelve el host de la conexión activa, no MONGODB_URI. Con npm run dev responde atlas; con dev:local o MongoDB en memoria responde local, y el cliente deja de anunciar MongoDB Atlas en el encabezado, el panel lateral y el alta."
+          }
+        },
         {
           "name": "Login Soporte TI",
           "event": [
@@ -70,7 +102,9 @@
                   "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
                   "pm.collectionVariables.set('tokenSoporte', pm.response.json().token);",
-                  "pm.collectionVariables.set('idPropio', pm.response.json().user.id);"
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('tokenSoporte', pm.response.json().token);",
+                  "pm.collectionVariables.set('idPropio', pm.response.json().user.id);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('idPropio', pm.response.json().user.id);"
                 ]
               }
             }
@@ -112,7 +146,8 @@
                 "exec": [
                   "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "pm.collectionVariables.set('tokenReportante', pm.response.json().token);"
+                  "pm.collectionVariables.set('tokenReportante', pm.response.json().token);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('tokenReportante', pm.response.json().token);"
                 ]
               }
             }
@@ -154,7 +189,8 @@
                 "exec": [
                   "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "pm.collectionVariables.set('tokenTecnico', pm.response.json().token);"
+                  "pm.collectionVariables.set('tokenTecnico', pm.response.json().token);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('tokenTecnico', pm.response.json().token);"
                 ]
               }
             }
@@ -196,7 +232,8 @@
                 "exec": [
                   "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "pm.collectionVariables.set('tokenDirectivo', pm.response.json().token);"
+                  "pm.collectionVariables.set('tokenDirectivo', pm.response.json().token);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('tokenDirectivo', pm.response.json().token);"
                 ]
               }
             }
@@ -437,7 +474,8 @@
                 "exec": [
                   "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "pm.collectionVariables.set('id', pm.response.json()._id);"
+                  "pm.collectionVariables.set('id', pm.response.json()._id);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('id', pm.response.json()._id);"
                 ]
               }
             }
@@ -484,6 +522,63 @@
               "query": []
             },
             "description": "201 con folio UTM-AAAA-NNNN, estado Abierta y autorizacion.estado = pendiente. Guarda el _id en la variable id."
+          }
+        },
+        {
+          "name": "Crear incidencia como Soporte TI → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Alta desde Soporte TI\",\n  \"descripcion\": \"El alta es exclusiva del rol reportante; Soporte TI autoriza y asigna.\",\n  \"categoria\": \"Infraestructura\",\n  \"prioridad\": \"Media\",\n  \"edificio\": \"Edificio A\",\n  \"espacio\": \"Vestíbulo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias",
+              "query": []
+            },
+            "description": "Esperado: 403. El alta de incidencias es exclusiva del rol reportante."
           }
         },
         {
@@ -803,7 +898,8 @@
                 "exec": [
                   "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "pm.collectionVariables.set('idPendiente', ((pm.response.json().items || [])[0] || {})._id);"
+                  "pm.collectionVariables.set('idPendiente', (pm.response.json().items || []).filter(function (i) { return i._id !== pm.collectionVariables.get('id'); })[0]?._id);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('idPendiente', (pm.response.json().items || []).filter(function (i) { return i._id !== pm.collectionVariables.get('id'); })[0]?._id);"
                 ]
               }
             }
@@ -848,7 +944,11 @@
                 "exec": [
                   "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "pm.collectionVariables.set('tecnicoId', (pm.response.json()[0] || {}).id);"
+                  "pm.collectionVariables.set('tecnicoId', (pm.response.json()[0] || {}).id);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('tecnicoId', (pm.response.json()[0] || {}).id);",
+                  "pm.test('hay al menos dos técnicos para probar el alcance', function () { pm.expect((pm.response.json() || []).length).to.be.above(1); });",
+                  "pm.collectionVariables.set('otroTecnicoEmail', (pm.response.json().filter(function (t) { return t.id !== pm.collectionVariables.get('tecnicoId'); })[0] || {}).email || 'tecnico2@demo.utm.edu.mx');",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('otroTecnicoEmail', (pm.response.json().filter(function (t) { return t.id !== pm.collectionVariables.get('tecnicoId'); })[0] || {}).email || 'tecnico2@demo.utm.edu.mx');"
                 ]
               }
             }
@@ -1619,6 +1719,25 @@
                   "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
                 ]
               }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('tokenOtroTecnico')) {",
+                  "    var correo = pm.collectionVariables.get('otroTecnicoEmail') || 'tecnico2@demo.utm.edu.mx';",
+                  "    pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/auth/login',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ email: correo, password: 'Demo.2026' }) }",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200) pm.collectionVariables.set('tokenOtroTecnico', res.json().token);",
+                  "    });",
+                  "}"
+                ]
+              }
             }
           ],
           "request": {
@@ -1634,7 +1753,7 @@
                 },
                 {
                   "key": "value",
-                  "value": "Bearer {{tokenTecnico}}",
+                  "value": "Bearer {{tokenOtroTecnico}}",
                   "type": "text"
                 },
                 {
@@ -1648,7 +1767,7 @@
               "raw": "{{baseUrl}}/incidencias/{{idPendiente}}",
               "query": []
             },
-            "description": "Esperado: 403"
+            "description": "403: la incidencia está asignada a otro técnico. El pre-request inicia sesión con el técnico que NO recibió la asignación (guardado en otroTecnicoEmail)."
           }
         },
         {
@@ -2099,7 +2218,7 @@
       ]
     },
     {
-      "name": "5. Evidencias (bucket privado + URL firmada)",
+      "name": "5. Archivos: bucket por operación + URL firmada",
       "item": [
         {
           "name": "Adjuntar evidencia como reportante",
@@ -2110,7 +2229,12 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
-                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
+                  "pm.test('cada evidencia trae su bucket asignado', function () {",
+                  "  const e = pm.response.json().evidencias || [];",
+                  "  if (!e.length) return;",
+                  "  pm.expect(e.at(-1).bucket).to.be.oneOf(['incidencias-evidencias', 'incidencias-documentos']);",
+                  "});"
                 ]
               }
             }
@@ -2125,7 +2249,7 @@
                   "key": "evidencias",
                   "type": "file",
                   "src": [],
-                  "description": "Elige una imagen JPG/PNG o un PDF menor a 15 MB."
+                  "description": "Elige una JPG/PNG/WebP (<10 MB) o un documento PDF/Word/Excel/TXT (<20 MB)."
                 }
               ]
             },
@@ -2153,7 +2277,7 @@
               "raw": "{{baseUrl}}/incidencias/{{id}}/evidencias",
               "query": []
             },
-            "description": "multer en memoria (15 MB, 5 archivos, solo JPG/PNG/PDF); se sube al bucket privado y la respuesta guarda la ruta, nunca un enlace permanente."
+            "description": "multer en memoria: campo «evidencias», máximo 5 archivos. El servidor clasifica por contenido real: imagen → incidencias-evidencias (10 MB) y PDF/DOC/DOCX/XLS/XLSX/TXT → incidencias-documentos (20 MB). El cliente no elige el bucket. La respuesta guarda ruta y bucket, nunca un enlace permanente."
           }
         },
         {
@@ -2197,7 +2321,7 @@
               "raw": "{{baseUrl}}/incidencias/{{id}}",
               "query": []
             },
-            "description": "Cada evidencia trae url = createSignedUrl(3600 s). Verifica que expira y que el bucket sigue privado."
+            "description": "GET /incidencias/:id: cada evidencia se firma con createSignedUrl(3600) desde SU propio bucket. Verifica que el enlace expira y que los buckets siguen privados."
           }
         },
         {
@@ -2250,18 +2374,18 @@
               "raw": "{{baseUrl}}/incidencias/{{idPendiente}}/evidencias",
               "query": []
             },
-            "description": "El rechazo cerró la incidencia: no admite más evidencia. Se prueba con Soporte TI para que el 409 dependa solo del estado (el reportante que no es dueño recibiría antes un 403)."
+            "description": "Incidencia Cerrada → 409 antes de tocar Storage: no se escribe ningún objeto ni se guarda referencia."
           }
         },
         {
-          "name": "Un técnico no puede adjuntar evidencias → 403",
+          "name": "El técnico asignado sí puede adjuntar evidencias",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });"
                 ]
               }
             }
@@ -2303,7 +2427,7 @@
               "raw": "{{baseUrl}}/incidencias/{{id}}/evidencias",
               "query": []
             },
-            "description": "La ruta solo admite reportante o Soporte TI; el técnico registra horas en intervenciones."
+            "description": "CU-02: el técnico asignado (o Soporte TI) amplía evidencias de un expediente en curso; un técnico sin asignación recibe 403 y el chequeo ocurre antes de subir, así que el bucket no recibe nada."
           }
         },
         {
@@ -2357,7 +2481,65 @@
               "raw": "{{baseUrl}}/incidencias/{{id}}/evidencias",
               "query": []
             },
-            "description": "Esperado: 400"
+            "description": "Ejecutable, o un .png cuyos bytes no son PNG → 400: la validación usa el contenido real, no el Content-Type del navegador. Tampoco se guarda referencia en MongoDB."
+          }
+        },
+        {
+          "name": "PDF del expediente va a incidencias-documentos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('bucket de documentos', function () {",
+                  "  const e = pm.response.json().evidencias || [];",
+                  "  if (e.length) pm.expect(e.at(-1).bucket).to.eql('incidencias-documentos');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "evidencias",
+                  "type": "file",
+                  "src": [],
+                  "description": "Elige un PDF (<20 MB)."
+                }
+              ]
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/incidencias/{{id}}/evidencias",
+              "query": []
+            },
+            "description": "El mismo flujo decide el bucket por tipo de archivo: un PDF del expediente termina en incidencias-documentos (20 MB) y la respuesta conserva bucket y ruta."
           }
         }
       ]
@@ -2549,7 +2731,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
-                  "pm.test('responde en JSON', function () { pm.response.to.be.json; });"
+                  "pm.test('hoja .xlsx', function () { pm.expect(pm.response.headers.get('Content-Type')).to.match(/spreadsheetml/); pm.expect(pm.response.headers.get('Content-Disposition')).to.match(/attachment/); });"
                 ]
               }
             }
@@ -2798,7 +2980,103 @@
               "raw": "{{baseUrl}}/incidencias?etiqueta=WiFi",
               "query": []
             },
-            "description": "Busca en el arreglo de etiquetas ignoriendo mayúsculas y el carácter #."
+            "description": "Busca en el arreglo de etiquetas ignorando mayúsculas y el carácter #."
+          }
+        },
+        {
+          "name": "Edificios reales para el filtro de ubicación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('es un arreglo con al menos un edificio', function () {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(Array.isArray(j)).to.be.true;",
+                  "  pm.expect(j.length).to.be.above(0);",
+                  "});",
+                  "pm.test('sin vacíos ni duplicados', function () {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.every(function (e) { return typeof e === 'string' && e.trim().length > 0; })).to.be.true;",
+                  "  pm.expect(new Set(j).size).to.equal(j.length);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/edificios",
+              "query": []
+            },
+            "description": "200 con los valores distintos de `edificio` que existen en la base dentro del alcance de la cuenta. El selector *Ubicación* de la web se llena con esto: mientras usó una lista fija, un edificio creado en Atlas no se podía filtrar aunque tuviera expedientes."
+          }
+        },
+        {
+          "name": "Edificios como directivo → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenDirectivo}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/edificios",
+              "query": []
+            },
+            "description": "El directivo no ve expedientes ni sus datos de contacto, así que tampoco la lista de ubicaciones."
           }
         }
       ]
@@ -2860,7 +3138,8 @@
                 "exec": [
                   "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "pm.collectionVariables.set('artId', pm.response.json()._id);"
+                  "pm.collectionVariables.set('artId', pm.response.json()._id);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('artId', pm.response.json()._id);"
                 ]
               }
             }
@@ -3125,7 +3404,8 @@
                 "exec": [
                   "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "if (!pm.collectionVariables.get('idUsuario')) pm.collectionVariables.set('idUsuario', (pm.response.json().find(u => u.id !== pm.collectionVariables.get('idPropio')) || {}).id);"
+                  "if (!pm.collectionVariables.get('idUsuario')) pm.collectionVariables.set('idUsuario', (pm.response.json().find(u => u.id !== pm.collectionVariables.get('idPropio')) || {}).id);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('idUsuario', (pm.response.json().find(u => u.id !== pm.collectionVariables.get('idPropio')) || {}).id);"
                 ]
               }
             }
@@ -3170,7 +3450,8 @@
                 "exec": [
                   "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
                   "pm.test('responde en JSON', function () { pm.response.to.be.json; });",
-                  "if (pm.response.json().id) pm.collectionVariables.set('idUsuario', pm.response.json().id);"
+                  "if (pm.response.json().id) pm.collectionVariables.set('idUsuario', pm.response.json().id);",
+                  "if (typeof pm.environment !== 'undefined') pm.environment.set('idUsuario', pm.response.json().id);"
                 ]
               }
             }
@@ -3388,7 +3669,7 @@
               "raw": "{{baseUrl}}/users/{{idUsuario}}/rol",
               "query": []
             },
-            "description": "Surte efecto en la siguiente petición aunque el token sea viejo: el rol se revalida en la base."
+            "description": "Deja la cuenta con un solo rol (reemplaza el conjunto). Surte efecto en la siguiente petición aunque el token sea viejo: el rol se revalida en la base."
           }
         },
         {
@@ -3446,6 +3727,251 @@
               "query": []
             },
             "description": "Evita que Soporte TI se autodescienda y quede fuera del sistema."
+          }
+        },
+        {
+          "name": "Asignar varios roles a una cuenta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('el conjunto trae los dos roles', function () {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.roles).to.include.members(['tecnico', 'reportante']);",
+                  "  pm.expect(j.roles.length).to.eql(2);",
+                  "  pm.expect(j.roles).to.include(j.rol);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\"tecnico\", \"reportante\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idUsuario}}/roles",
+              "query": []
+            },
+            "description": "Reemplaza el conjunto de roles que autoriza. El rol activo se recalcula si ya no estaba en el nuevo conjunto. El cambio vale para el token viejo: auth() vuelve a leer la base en cada petición."
+          }
+        },
+        {
+          "name": "Crear cuenta con dos roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('nace con el conjunto pedido', function () {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.roles).to.eql(['soporte_ti', 'reportante']);",
+                  "  pm.expect(j.rol).to.eql('soporte_ti');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Multirol Postman\",\n  \"email\": \"multirol{{sufijo}}@demo.utm.edu.mx\",\n  \"password\": \"Clave.2026\",\n  \"roles\": [\"soporte_ti\", \"reportante\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "query": []
+            },
+            "description": "El panel de Usuarios hace esta misma llamada con las casillas de rol. Repite la colección subiendo {{sufijo}} si el correo ya existe (409)."
+          }
+        },
+        {
+          "name": "Quitarte Soporte TI a ti mismo → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('explica el bloqueo', function () {",
+                  "  pm.expect(pm.response.json().error).to.match(/Soporte TI/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\"reportante\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idPropio}}/roles",
+              "query": []
+            },
+            "description": "Nadie se queda sin panel: la cuenta que ejecuta no puede expulsarse del rol Soporte TI y tampoco se permite que el último Soporte TI del sistema desaparezca."
+          }
+        },
+        {
+          "name": "Conjunto de roles vacío o inventado → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('nombra el rol inválido', function () {",
+                  "  pm.expect(pm.response.json().error).to.match(/Rol no válido|al menos un rol/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\"superusuario\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idUsuario}}/roles",
+              "query": []
+            },
+            "description": "Rechaza el conjunto vacío y cualquier rol fuera de ROLES sin escribir nada. Los alias heredados sí se aceptan y se normalizan: «admin» pasa a «soporte_ti»."
           }
         },
         {
@@ -3677,6 +4203,302 @@
             },
             "description": "Esperado: 404"
           }
+        },
+        {
+          "name": "Subir foto de perfil (usuarios-archivos)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Elige una JPG/PNG/WebP menor a 5 MB."
+                }
+              ]
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idPropio}}/avatar",
+              "query": []
+            },
+            "description": "Foto de perfil → bucket usuarios-archivos, límite 5 MB y solo imagen real (JPG/PNG/WebP). 200 con el perfil actualizado."
+          }
+        },
+        {
+          "name": "Leer mi foto devuelve URL firmada de vida corta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('bucket de perfiles', function () {",
+                  "  const a = pm.response.json().avatar;",
+                  "  if (a) pm.expect(a.bucket).to.eql('usuarios-archivos');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idPropio}}/avatar",
+              "query": []
+            },
+            "description": "200 {avatar:{url,path,bucket,tipo,size,fecha}}; la url es createSignedUrl(3600) del bucket privado, sin enlaces permanentes. avatar:null si no tiene foto."
+          }
+        },
+        {
+          "name": "Otro usuario no puede leer mi foto → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenTecnico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idPropio}}/avatar",
+              "query": []
+            },
+            "description": "La foto es privada: solo el dueño o Soporte TI la firman. 403 y ninguna escritura en el bucket."
+          }
+        },
+        {
+          "name": "Un usuario no puede reemplazar la foto de otra cuenta → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });",
+                  "pm.test('la respuesta no revela la ruta del archivo', function () { pm.expect(pm.response.text()).to.not.match(/signedUrl|\"path\"/); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Cualquier imagen."
+                }
+              ]
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenReportante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idUsuario}}/avatar",
+              "query": []
+            },
+            "description": "Cambiar la foto de otra cuenta → 403. El chequeo ocurre antes de subir, así que el bucket no recibe el archivo."
+          }
+        },
+        {
+          "name": "Subir un PDF como foto de perfil → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": [],
+                  "description": "Elige un PDF para comprobar el rechazo."
+                }
+              ]
+            },
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idPropio}}/avatar",
+              "query": []
+            },
+            "description": "La operación exige imagen: un PDF válido se rechaza con 400 «La foto de perfil debe ser JPG, PNG o WebP» y no se escribe nada en Storage."
+          }
+        },
+        {
+          "name": "Quitar la foto de perfil",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "Authorization",
+                  "type": "text"
+                },
+                {
+                  "key": "value",
+                  "value": "Bearer {{tokenSoporte}}",
+                  "type": "text"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{idPropio}}/avatar",
+              "query": []
+            },
+            "description": "200 {avatar:null} y el objeto se elimina del bucket (no quedan huérfanos). Si la cuenta se da de baja, la foto también se borra."
+          }
         }
       ]
     },
@@ -3856,6 +4678,21 @@
           }
         }
       ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Genera sufijo numérico único si está en 1 para evitar 409 por email repetido",
+          "const actual = pm.collectionVariables.get(\"sufijo\");",
+          "if (!actual || actual === \"1\" || actual === \"\") {",
+          "    pm.collectionVariables.set(\"sufijo\", Date.now().toString().slice(-4));",
+          "}"
+        ]
+      }
     }
   ]
 }

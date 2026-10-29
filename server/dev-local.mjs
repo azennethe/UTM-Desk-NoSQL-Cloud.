@@ -22,30 +22,54 @@ process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
 // ADMIN_EMAIL/ADMIN_PASSWORD del .env también se respetan aquí: bootstrap() crea o
 // asciende esa cuenta como Soporte TI para poder probar el panel de administración.
 if (!process.env.AUTH_RATE) process.env.AUTH_RATE = '60';
+// El proyecto simulado de esta demo usa los tres nombres de la consigna. Sin esto, el
+// SUPABASE_BUCKET histórico del .env heredaría el bucket de las evidencias y la
+// clasificación quedaría invisible en pantalla.
+process.env.SUPABASE_BUCKET_EVIDENCIAS ||= 'incidencias-evidencias';
+process.env.SUPABASE_BUCKET_DOCUMENTOS ||= 'incidencias-documentos';
+process.env.SUPABASE_BUCKET_PERFILES ||= 'usuarios-archivos';
 console.log('🧪 Base en memoria (desechable):', process.env.MONGODB_URI);
 
-// Solo para este arranque de desarrollo: guarda los bytes en RAM y los sirve por su propio
-// puerto, imitando la URL firmada de un bucket privado. No demuestra la integración con
-// Supabase; eso requiere credenciales reales.
-const blob = new Map();
+// Solo para este arranque de desarrollo: guarda los bytes en RAM por bucket y los sirve por
+// su propio puerto, imitando la URL firmada de un bucket privado. No demuestra la integración
+// con Supabase; eso requiere credenciales reales.
+// El mapa de buckets es una SIMULACIÓN: solo existen los tres nombres que pide la consigna
+// (y el histórico), así que un archivo enviado a un bucket inexistente falla igual que arriba.
+import { BUCKETS, nombreBucket, resumenBuckets } from './archivos.js';
+const clave = new Map(); // `${bucket}/${ruta}` -> { buf, mime }
+const permitidos = new Set([...Object.keys(BUCKETS).map(nombreBucket), process.env.SUPABASE_BUCKET || 'evidencias']);
 const PUERTO_BLOB = PORT + 1;
-const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', pdf: 'application/pdf' };
-const firmado = path => `http://localhost:${PUERTO_BLOB}/` + encodeURIComponent(path);
+const MIME = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
+    pdf: 'application/pdf', txt: 'text/plain; charset=utf-8',
+    doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+const firmado = (bucket, ruta) => `http://localhost:${PUERTO_BLOB}/` + encodeURIComponent(`${bucket}/${ruta}`);
 const storage = {
     storage: {
-        from: () => ({
-            upload: async (path, buf) => { blob.set(path, Buffer.from(buf)); return { error: null }; },
-            createSignedUrl: async path => ({ data: { signedUrl: firmado(path) } }),
-        }),
+        from: bucket => {
+            const conocido = permitidos.has(bucket);
+            return {
+                upload: async (ruta, buf, o) => {
+                    if (!conocido) return { error: { message: `bucket «${bucket}» no existe en el proyecto simulado` } };
+                    clave.set(`${bucket}/${ruta}`, { buf: Buffer.from(buf), mime: o?.contentType });
+                    console.log(`   🪣 ${bucket}/${ruta}`);
+                    return { error: null };
+                },
+                createSignedUrl: async ruta => ({ data: { signedUrl: clave.has(`${bucket}/${ruta}`) ? firmado(bucket, ruta) : null } }),
+                remove: async rutas => { for (const r of [].concat(rutas || [])) clave.delete(`${bucket}/${r}`); return { data: rutas, error: null }; },
+            };
+        },
     },
 };
 
 // createApp() cierra con un 404 global, así que las evidencias no pueden montarse en ese mismo servidor.
 http.createServer((q, s) => {
-    const b = blob.get(decodeURIComponent((q.url || '/').slice(1).split('?')[0]));
-    if (!b) { s.writeHead(404, { 'Content-Type': 'application/json' }); return s.end('{"error":"evidencia no encontrada"}'); }
-    s.writeHead(200, { 'Content-Type': MIME[String(q.url).split('.').pop()] || 'application/octet-stream' });
-    s.end(b);
+    const v = clave.get(decodeURIComponent((q.url || '/').slice(1).split('?')[0]));
+    if (!v) { s.writeHead(404, { 'Content-Type': 'application/json' }); return s.end('{"error":"archivo no encontrado"}'); }
+    s.writeHead(200, { 'Content-Type': v.mime || MIME[String(q.url).split('.').pop()] || 'application/octet-stream' });
+    s.end(v.buf);
 }).listen(PUERTO_BLOB);
 
 await bootstrap({ uri: process.env.MONGODB_URI, ttlDias: 60 });
@@ -72,6 +96,8 @@ const app = createApp({
 });
 app.listen(PORT, () => {
     console.log(`✅ API local lista en http://localhost:${PORT}/api`);
+    console.log('   ⚠️  Base EN MEMORIA: lo que crees aquí NO se guarda en MongoDB Atlas');
+    console.log('      (se pierde al reiniciar). Para Atlas usa npm run dev en el puerto 4000.');
     console.log(`   Evidencias de desarrollo en http://localhost:${PUERTO_BLOB} (RAM, sin Supabase)`);
     console.log(`   ${r.total} incidencias demo, ${r.conEv} con evidencias, ${r.subidas} archivos en RAM`);
     console.log(`   Cuentas (contraseña ${PASS}): soporte@demo.utm.edu.mx, tecnico1@demo.utm.edu.mx,`);

@@ -1,0 +1,21 @@
+# Nada de esto entra al contexto de build. Lo importante son las credenciales:
+# un COPY server/.env metería la cadena de Atlas y las claves de Supabase en una
+# capa de la imagen, visible para quien pueda descargarla.
+.git
+.gitignore
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+client/dist
+server/.mongo-memory
+.cache
+**/*.log
+evidencias-locales
+documentacion-evidencia
+postman
+*.pdf
+*.docx
+*.md
+.DS_Store
+Thumbs.db
