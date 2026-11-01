@@ -362,7 +362,7 @@ export function createApp(cfg = {}) {
         // Solo para las referencias que no registraron su bucket (anteriores a la
         // clasificación por operación). Las subidas nuevas usan su propio bucket.
         bucket = process.env.SUPABASE_BUCKET || 'evidencias',
-        corsOrigins = (process.env.CLIENT_URL || 'http://localhost:5173,http://localhost:5174').split(',').map(s => s.trim()).filter(Boolean),
+        corsOrigins = (process.env.CLIENT_URL || 'http://localhost:5173,http://localhost:5174,https://utm-desk-five.vercel.app').split(',').map(s => s.trim()).filter(Boolean),
         storage = null,
         ttlDias = Number(process.env.TTL_DIAS ?? 60)
     } = cfg;
@@ -372,16 +372,23 @@ export function createApp(cfg = {}) {
     const sb = storage || clienteSupabase();
 
     const app = express();
+    // Confianza en proxies para Vercel / Cloudflare: permite que express-rate-limit
+    // obtenga la IP real desde X-Forwarded-For sin lanzar ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+    app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
     app.disable('x-powered-by');
     app.use(helmet({ contentSecurityPolicy: false }));
 
     // http://127.0.0.1:5173 y http://localhost:5173 son orígenes distintos para el navegador, y
     // rechazar el que falte corta el inicio de sesión con «No se pudo conectar con el servidor».
-    // Se acepta cualquier nombre local de un puerto ya listado en CLIENT_URL.
+    // Se acepta cualquier nombre local de un puerto ya listado en CLIENT_URL o dominios Vercel.
     const local = /^https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)$/;
     const puertosLocales = new Set(corsOrigins.map(o => local.exec(o)?.[1]).filter(Boolean));
     const origenPermitido = (origen, cb) => {
         if (!origen || corsOrigins.includes(origen)) return cb(null, true);
+        try {
+            const u = new URL(origen);
+            if (u.hostname.endsWith('.vercel.app')) return cb(null, true);
+        } catch {}
         const m = local.exec(origen);
         cb(null, !!(m && puertosLocales.has(m[1])));
     };
@@ -459,6 +466,7 @@ export function createApp(cfg = {}) {
     const limiteAuth = rateLimit({
         windowMs: 15 * 60 * 1000, limit: Number(process.env.AUTH_RATE || 1000),
         standardHeaders: true, legacyHeaders: false,
+        validate: { xForwardedForHeader: false },
         message: { error: 'Demasiados intentos, intenta en unos minutos' }
     });
 
@@ -491,7 +499,7 @@ export function createApp(cfg = {}) {
     }));
 
     app.post('/api/auth/login', limiteAuth, h(async (q, s) => {
-        const email = typeof q.body?.email === 'string' ? q.body.email.toLowerCase() : '';
+        const email = typeof q.body?.email === 'string' ? q.body.email.toLowerCase().trim() : '';
         const password = typeof q.body?.password === 'string' ? q.body.password : '';
         const u = await User.findOne({ email }).select('+password');
         const ok = u && await bcrypt.compare(password, u.password);
@@ -1060,19 +1068,23 @@ export const sincronizarFechasDeRegistro = async () => {
     return sinFecha.length;
 };
 
-export async function bootstrap({ uri = process.env.MONGODB_URI, ttlDias } = {}) {
-    if (!uri) throw new Error('MONGODB_URI no está configurado');
-    await mongoose.connect(uri, { tlsAllowInvalidCertificates: true });
-    // El mensaje no puede decir «Atlas» por defecto: esta misma línea aparecía con
-    // (127.0.0.1) conectando a MongoDB en memoria. Se pregunta a la conexión activa, igual que /estado.
-    const servidores = [...(mongoose.connection.getClient()?.topology?.description?.servers || [])].map(([h]) => h).join(' ');
-    const almacén = almacenDe(servidores);
-    console.log(almacén === 'atlas'
-        ? `✅ Conectado a MongoDB Atlas (${servidores || mongoose.connection.host}), Base de datos: [${mongoose.connection.name}]`
-        : `✅ Conectado a MongoDB LOCAL (${servidores || mongoose.connection.host}), Base de datos: [${mongoose.connection.name}] — NO escribe en Atlas`);
-    await ensureIndexes(ttlDias);
+export async function bootstrap({
+    uri = process.env.MONGODB_URI,
+    ttlDias,
+    dbName = process.env.MONGODB_DB || 'UTM_Desk'
+} = {}) {
+    if (!uri) {
+        throw new Error('MONGODB_URI no está configurado');
+    }
 
-    // Migración de roles heredados: usuario→reportante, admin→soporte_ti
+    await mongoose.connect(uri, { dbName });
+
+    console.log(
+        `✅ Conectado a MongoDB Atlas (${mongoose.connection.host}), Base de datos: [${mongoose.connection.name}]`
+    );
+
+    await ensureIndexes(ttlDias);
+    
     const migrados = await User.updateMany({ rol: 'usuario' }, { $set: { rol: 'reportante' } });
     const migrados2 = await User.updateMany({ rol: 'admin' }, { $set: { rol: 'soporte_ti' } });
 
@@ -1151,3 +1163,4 @@ if (process.env.NODE_ENV !== 'test' && process.argv[1] && import.meta.url === pa
         process.exit(1);
     }
 }
+
